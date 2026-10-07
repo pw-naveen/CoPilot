@@ -36,7 +36,7 @@ export function MockPhone({ users, initial }: { users: { name: string; phone: st
   const send = (body: object) => fetch("/api/dev/phone", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ from: phone, ...body }) });
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
       <div className="flex flex-col gap-2">
         {users.map((u) => (
           <button key={u.phone} onClick={() => setPhone(u.phone)} className={cx("flex items-center justify-between rounded-[16px] px-4 py-3 text-left", phone === u.phone ? "bg-white shadow-card" : "hover:bg-blush-50")}>

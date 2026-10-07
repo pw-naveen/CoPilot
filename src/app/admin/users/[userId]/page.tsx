@@ -30,9 +30,9 @@ export default async function UserDetail({ params }: { params: Promise<{ userId:
     <>
       <PageHeader eyebrow={[u.title, u.org].filter(Boolean).join(" · ") || "Account"} lead={u.displayName} accent={u.status === "active" ? "is live." : u.status === "paused" ? "is paused." : "is setting up."} />
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
-          <dl className="grid grid-cols-[140px_1fr] gap-y-3 text-[14px]">
+          <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-y-3 text-[14px]">
             <dt className="text-muted">Status</dt>
             <dd><StatusPill status={u.status} /></dd>
             <dt className="text-muted">Email</dt>

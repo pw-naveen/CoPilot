@@ -255,13 +255,13 @@ export function reviseDraft(userId: string, a: { persona: Persona; text: string;
 
 // ── Media ─────────────────────────────────────────────────────────────────
 
-export async function transcribe(userId: string | null, audio: Buffer, mime: string): Promise<string> {
+export async function transcribe(userId: string | null, audio: Buffer, mime: string, questionKey?: string): Promise<string> {
   const ai = await openai();
   const model = models().transcribe;
   const started = Date.now();
   if (!ai) {
     await log({ userId, kind: "speech_to_text", promptVersion: "n/a", model: "mock", ok: true, started });
-    return mock.transcript(audio);
+    return mock.transcript(audio, questionKey);
   }
   try {
     const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("mpeg") ? "mp3" : "webm";

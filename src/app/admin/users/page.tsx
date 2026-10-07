@@ -18,7 +18,7 @@ export default async function UsersPage() {
         accent="one place."
         intro={actor.role === "admin" ? "All accounts. Invite a new user to start their setup." : "The accounts assigned to you."}
       />
-      <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-0">
           {users.length === 0 ? (
             <EmptyState icon="users-three" title="No accounts yet">

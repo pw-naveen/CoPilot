@@ -59,6 +59,8 @@ export const SPECS: Spec[] = [
   { route: "users/[userId]/profile", method: "PUT", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: (f, t) => ({ name: f.user(t).name, displayName: f.user(t).displayName, languages: ["en"], timezone: "Asia/Kuala_Lumpur" }) },
   { route: "users/[userId]/answers/[key]", method: "PUT", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, key: "career_story" }), body: () => ({ text: "Twenty years in cardiology." }) },
   { route: "users/[userId]/answers/[key]/audio", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, key: "career_story" }), body: () => undefined },
+  { route: "users/[userId]/answers/[key]/audio", method: "DELETE", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, key: "career_story" }) },
+  { route: "users/[userId]/answers", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
   { route: "users/[userId]/samples", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ text: "A sample long enough to be accepted by the sample validator, honestly." }) },
   { route: "users/[userId]/samples/[sampleId]", method: "DELETE", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, sampleId: f.sample(t) }) },
   { route: "users/[userId]/persona", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },

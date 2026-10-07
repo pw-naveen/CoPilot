@@ -12,7 +12,7 @@ export const handlers: Record<JobKind, Handler> = {
   async transcribe_answer(userId, input) {
     const { key, storageKey, mime } = input as { key: string; storageKey: string; mime: string };
     const audio = await storage().get(storageKey);
-    const transcript = await ai.transcribe(userId, audio, mime);
+    const transcript = await ai.transcribe(userId, audio, mime, key);
     await db
       .update(schema.onboardingAnswers)
       .set({ transcript })

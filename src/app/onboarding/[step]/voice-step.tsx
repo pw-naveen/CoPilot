@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, waitForJob } from "@/lib/api";
-import { Recorder } from "@/components/recorder";
-import { Button, Card, Icon, Label, PageHeader, Textarea, cx } from "@/components/ui";
-import { ContinueBar, ReviewOnly } from "./step-common";
+import { api } from "@/lib/api";
+import { clock, extFor, useRecorder } from "@/components/recorder";
+import { Button, Card, Icon, Label, ProgressRing, Textarea, cx } from "@/components/ui";
+import { ReviewOnly } from "./step-common";
 
 type Answer = { key: string; text: string; transcript: string | null; audio: string | null };
 type Sample = { id: string; source: string; text: string };
+type Stage = "intro" | "questions" | "prefs" | "samples" | "review";
+
 const MIN = 6;
+const answeredQ = (a?: Answer) => !!((a?.text ?? "").trim() || a?.audio);
 
 export function VoiceStep(p: {
   userId: string;
@@ -20,125 +23,513 @@ export function VoiceStep(p: {
   samples: Sample[];
 }) {
   const [answers, setAnswers] = useState<Record<string, Answer>>(Object.fromEntries(p.answers.map((a) => [a.key, a])));
-  const answered = p.questions.filter((q) => (answers[q.key]?.text ?? "").trim() || answers[q.key]?.audio).length;
-  const transcribing = Object.values(answers).some((a) => a.audio && !a.transcript);
+  const [stage, setStage] = useState<Stage>(() => (p.answers.some(answeredQ) ? "review" : "intro"));
+  const [i, setI] = useState(0);
+
+  const answered = p.questions.filter((q) => answeredQ(answers[q.key])).length;
+  const pending = useMemo(() => p.questions.filter((q) => answers[q.key]?.audio && !answers[q.key]?.transcript).map((q) => q.key), [answers, p.questions]);
+
+  const update = useCallback((key: string, patch: Partial<Answer>) => {
+    setAnswers((prev) => {
+      const base: Answer = prev[key] ?? { key, text: "", transcript: null, audio: null };
+      return { ...prev, [key]: { ...base, ...patch } };
+    });
+  }, []);
+
+  // One poller for every outstanding transcript. Pending state is derived from the
+  // server (audio stored, transcript still null) rather than from job ids held in
+  // memory, so closing the tab or reloading mid-flow doesn't lose track of them.
+  useEffect(() => {
+    if (!pending.length || !p.editable) return;
+    let live = true;
+    const id = setInterval(async () => {
+      try {
+        const { answers: rows } = await api<{ answers: { key: string; hasAudio: boolean; transcript: string | null }[] }>(`/api/users/${p.userId}/answers`);
+        if (!live) return;
+        setAnswers((prev) => {
+          const next = { ...prev };
+          for (const r of rows) {
+            const cur = next[r.key];
+            if (cur && r.transcript && !cur.transcript) next[r.key] = { ...cur, transcript: r.transcript };
+            if (cur && !r.hasAudio && cur.audio) next[r.key] = { ...cur, audio: null, transcript: null };
+          }
+          return next;
+        });
+      } catch {
+        /* keep polling; a dropped request is not fatal */
+      }
+    }, 2500);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
+  }, [pending.length, p.editable, p.userId]);
+
+  if (!p.editable)
+    return (
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-6">
+          <ReviewOnly />
+        </div>
+        <Review questions={p.questions} answers={answers} userId={p.userId} editable={false} onJump={() => {}} />
+      </div>
+    );
+
+  const common = { userId: p.userId, answers, answered, total: p.questions.length };
+
+  if (stage === "intro") return <Intro total={p.questions.length} onStart={() => setStage("questions")} />;
+
+  if (stage === "questions") {
+    const q = p.questions[i];
+    return (
+      <Flow
+        {...common}
+        title={`Question ${i + 1} of ${p.questions.length}`}
+        onBack={i === 0 ? () => setStage("intro") : () => setI(i - 1)}
+        onSkipAll={() => setStage("review")}
+      >
+        <QuestionScreen
+          key={q.key}
+          userId={p.userId}
+          q={q}
+          n={i + 1}
+          answer={answers[q.key]}
+          onPatch={(patch) => update(q.key, patch)}
+          onNext={() => (i + 1 < p.questions.length ? setI(i + 1) : setStage("prefs"))}
+          isLast={i + 1 === p.questions.length}
+        />
+      </Flow>
+    );
+  }
+
+  if (stage === "prefs")
+    return (
+      <Flow {...common} title="Tone preferences" onBack={() => setStage("questions")} onSkipAll={() => setStage("review")}>
+        <ToneSliders userId={p.userId} initial={p.prefs} onDone={() => setStage("samples")} />
+      </Flow>
+    );
+
+  if (stage === "samples")
+    return (
+      <Flow {...common} title="Writing samples" onBack={() => setStage("prefs")} onSkipAll={() => setStage("review")}>
+        <Samples userId={p.userId} initial={p.samples} onDone={() => setStage("review")} />
+      </Flow>
+    );
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Step 2 · Your voice"
-        lead="Tell us how you think."
-        accent="We'll learn how you write."
-        intro={`Type or record each answer, whichever is quicker. Answer at least ${MIN} of the ${p.questions.length}; more answers make a better persona.`}
+    <Flow {...common} title="Review" onBack={() => setStage("questions")}>
+      <Review
+        questions={p.questions}
+        answers={answers}
+        userId={p.userId}
+        editable
+        onJump={(idx) => {
+          setI(idx);
+          setStage("questions");
+        }}
       />
-      {!p.editable && <div className="mb-6"><ReviewOnly /></div>}
-
-      <section className="flex flex-col gap-5">
-        {p.questions.map((q, i) => (
-          <QuestionCard
-            key={q.key}
-            n={i + 1}
-            userId={p.userId}
-            q={q}
-            answer={answers[q.key]}
-            editable={p.editable}
-            onChange={(a) => setAnswers((prev) => ({ ...prev, [q.key]: a }))}
-          />
-        ))}
-      </section>
-
-      <ToneSliders userId={p.userId} initial={p.prefs} editable={p.editable} />
-      <Samples userId={p.userId} initial={p.samples} editable={p.editable} />
-
-      {p.editable && (
-        <ContinueBar
-          userId={p.userId}
-          step={3}
-          label="Build my persona"
-          disabled={answered < MIN || transcribing}
-          hint={transcribing ? "Waiting for a voice note to finish transcribing…" : `${answered} of ${p.questions.length} answered`}
-        />
-      )}
-    </>
+      <Finish userId={p.userId} answered={answered} pending={pending.length} />
+    </Flow>
   );
 }
 
-function QuestionCard(p: { n: number; userId: string; q: { key: string; q: string }; answer?: Answer; editable: boolean; onChange: (a: Answer) => void }) {
-  const a = p.answer ?? { key: p.q.key, text: "", transcript: null, audio: null };
-  const [text, setText] = useState(a.text);
-  const [saved, setSaved] = useState(true);
-  const [busy, setBusy] = useState(false);
+// ── Chrome ────────────────────────────────────────────────────────────────
+
+/**
+ * The questionnaire owns the whole viewport rather than sitting inside the setup
+ * page's chrome: one question at a time only works if nothing else competes with it.
+ */
+function Screen({ children }: { children: React.ReactNode }) {
+  return <div className="wash fixed inset-0 z-50 overflow-y-auto overscroll-contain">{children}</div>;
+}
+
+/** Full-screen frame: progress ring up top, content centred, actions within thumb reach. */
+function Flow(p: {
+  title: string;
+  answered: number;
+  total: number;
+  children: React.ReactNode;
+  onBack?: () => void;
+  onSkipAll?: () => void;
+}) {
+  return (
+    <Screen>
+    <div className="flex min-h-[100dvh] flex-col">
+      <header className="sticky top-0 z-10 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
+        <div className="mx-auto flex w-full max-w-xl items-center gap-4">
+        {p.onBack ? (
+          <button onClick={p.onBack} aria-label="Back" className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted hover:bg-blush-50 hover:text-red-text">
+            <Icon name="caret-left" size={22} className="text-current" />
+          </button>
+        ) : (
+          <span className="h-10 w-10 flex-none" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold text-ink">{p.title}</p>
+          <p className="text-[12px] text-muted">
+            {p.answered} of {p.total} answered{p.answered >= MIN ? " · enough to continue" : ` · ${MIN - p.answered} more to continue`}
+          </p>
+        </div>
+        <ProgressRing value={p.answered} max={p.total} size={44} stroke={4}>
+          {p.answered}
+        </ProgressRing>
+        </div>
+      </header>
+      <main className="flex flex-1 flex-col px-4 pb-10 sm:px-6">{p.children}</main>
+      {p.onSkipAll && (
+        <footer className="px-4 pb-6 text-center sm:px-6">
+          <button onClick={p.onSkipAll} className="text-[13px] text-muted underline underline-offset-4 hover:text-red-text">
+            Skip to review
+          </button>
+        </footer>
+      )}
+    </div>
+    </Screen>
+  );
+}
+
+function Intro({ total, onStart }: { total: number; onStart: () => void }) {
+  return (
+    <Screen>
+    <div className="mx-auto flex min-h-[100dvh] max-w-xl flex-col justify-center gap-6 px-4 py-16 text-center">
+      <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-red shadow-disc">
+        <Icon name="microphone" size={36} className="text-white" />
+      </span>
+      <h1 className="title title-hero">
+        <span>Tell us</span>
+        <span className="accent">how you think.</span>
+      </h1>
+      <p className="lead">
+        {total} short questions, one at a time. Talk your answers out loud — it's faster than typing and we learn far more
+        from how you actually speak.
+      </p>
+      <p className="text-[14px] text-muted">Answer at least {MIN}. You can stop and come back whenever you like.</p>
+      <Button className="mx-auto w-full sm:w-auto" onClick={onStart}>
+        Start <Icon name="arrow-right" size={18} className="text-current" />
+      </Button>
+    </div>
+    </Screen>
+  );
+}
+
+// ── One question ──────────────────────────────────────────────────────────
+
+function QuestionScreen(p: {
+  userId: string;
+  q: { key: string; q: string };
+  n: number;
+  answer?: Answer;
+  onPatch: (patch: Partial<Answer>) => void;
+  onNext: () => void;
+  isLast: boolean;
+}) {
+  const a = p.answer;
+  const [typing, setTyping] = useState(!!a?.text && !a?.audio);
+  const [text, setText] = useState(a?.text ?? "");
   const [err, setErr] = useState<string | null>(null);
-  const last = useRef(a.text);
+  const [uploading, setUploading] = useState(false);
+  const saved = useRef(a?.text ?? "");
 
-  async function save() {
-    if (text === last.current) return;
-    await api(`/api/users/${p.userId}/answers/${p.q.key}`, { method: "PUT", body: { text } });
-    last.current = text;
-    setSaved(true);
-    p.onChange({ ...a, text });
-  }
+  const saveText = useCallback(async () => {
+    if (text === saved.current) return;
+    saved.current = text;
+    p.onPatch({ text });
+    await api(`/api/users/${p.userId}/answers/${p.q.key}`, { method: "PUT", body: { text } }).catch(() => {});
+  }, [text, p]);
 
+  /**
+   * The recording is stored, then the flow moves on immediately — transcription
+   * carries on in the background. Waiting for it here would stall the user on every
+   * question for no benefit; the answer already counts as given once audio is saved.
+   */
   async function upload(blob: Blob) {
-    setBusy(true);
+    setUploading(true);
     setErr(null);
+    const localUrl = URL.createObjectURL(blob);
     try {
       const form = new FormData();
-      form.set("audio", new File([blob], "answer.webm", { type: blob.type }));
+      form.set("audio", new File([blob], `answer.${extFor(blob.type)}`, { type: blob.type }));
       const res = await fetch(`/api/users/${p.userId}/answers/${p.q.key}/audio`, { method: "POST", body: form });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      p.onChange({ ...a, audio: URL.createObjectURL(blob), transcript: null });
-      const { transcript } = await waitForJob<{ transcript: string }>(data.jobId);
-      p.onChange({ ...a, audio: URL.createObjectURL(blob), transcript });
+      if (!res.ok) throw new Error(data.error ?? "That recording didn't upload");
+      p.onPatch({ audio: localUrl, transcript: null });
+      setUploading(false);
+      p.onNext();
     } catch (e) {
+      URL.revokeObjectURL(localUrl);
       setErr((e as Error).message);
-    } finally {
-      setBusy(false);
+      setUploading(false);
     }
   }
 
-  const done = !!(text.trim() || a.audio);
+  async function discard() {
+    p.onPatch({ audio: null, transcript: null });
+    await api(`/api/users/${p.userId}/answers/${p.q.key}/audio`, { method: "DELETE" }).catch(() => {});
+  }
+
+  const rec = useRecorder({ onDone: upload });
+  const hasAnswer = !!(text.trim() || a?.audio);
+
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 py-6">
+      <div className="flex flex-col gap-3">
+        <span className="text-[12px] font-bold tracking-wide text-red-text uppercase">Question {p.n}</span>
+        <h2 className="text-[24px] leading-tight font-semibold text-balance text-ink sm:text-[28px]">{p.q.q}</h2>
+      </div>
+
+      {a?.audio ? (
+        <RecordedAnswer answer={a} onDiscard={discard} />
+      ) : typing ? (
+        <div className="flex flex-col gap-3">
+          <Textarea
+            autoFocus
+            rows={6}
+            value={text}
+            placeholder="Type your answer…"
+            onChange={(e) => setText(e.target.value)}
+            onBlur={saveText}
+            className="min-h-40 text-[16px]"
+          />
+          <button onClick={() => setTyping(false)} className="self-start text-[13px] font-semibold text-red-text">
+            <Icon name="microphone" size={15} className="mr-1 inline text-current" />
+            Record it instead
+          </button>
+        </div>
+      ) : (
+        <MicPanel rec={rec} uploading={uploading} onType={() => setTyping(true)} />
+      )}
+
+      {err && (
+        <p className="rounded-[16px] bg-blush-50 px-4 py-3 text-[13px] text-red-text">
+          {err}{" "}
+          <button className="font-semibold underline" onClick={() => setErr(null)}>
+            Try again
+          </button>
+        </p>
+      )}
+
+      <div className="mt-auto flex items-center gap-3 pt-4">
+        <Button
+          className="flex-1"
+          variant={hasAnswer ? "primary" : "ghost"}
+          disabled={rec.state === "recording" || uploading}
+          onClick={async () => {
+            await saveText();
+            p.onNext();
+          }}
+        >
+          {hasAnswer ? (p.isLast ? "Done" : "Next") : "Skip this one"} <Icon name="arrow-right" size={18} className="text-current" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** The recording control, sized for a thumb and showing that the mic is live. */
+function MicPanel({ rec, uploading, onType }: { rec: ReturnType<typeof useRecorder>; uploading: boolean; onType: () => void }) {
+  const recording = rec.state === "recording";
+  const blocked = rec.state === "denied" || rec.state === "unsupported";
+
+  if (blocked)
+    return (
+      <Card className="my-auto flex flex-col items-center gap-3 py-10 text-center">
+        <Icon name="warning-circle" size={28} className="text-red" />
+        <p className="text-[15px] font-semibold text-ink">
+          {rec.state === "denied" ? "Microphone blocked" : "This browser can't record"}
+        </p>
+        <p className="max-w-xs text-[14px] text-muted">
+          {rec.state === "denied"
+            ? "Allow microphone access in your browser settings, or type your answer instead."
+            : "Type your answer instead — it works just as well."}
+        </p>
+        <Button variant="secondary" onClick={onType}>
+          Type my answer
+        </Button>
+      </Card>
+    );
+
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 py-6">
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={recording ? rec.stop : rec.start}
+        aria-label={recording ? "Stop recording" : "Start recording"}
+        className={cx(
+          "relative grid h-28 w-28 place-items-center rounded-full transition-transform active:scale-95 disabled:opacity-60",
+          recording ? "bg-red shadow-disc" : "bg-red shadow-disc hover:brightness-110",
+        )}
+      >
+        {recording && (
+          <span
+            aria-hidden
+            className="absolute inset-0 rounded-full bg-red/30"
+            style={{ transform: `scale(${1 + rec.level * 0.6})`, transition: "transform 90ms linear" }}
+          />
+        )}
+        <Icon name={recording ? "stop" : "microphone"} size={44} className="relative text-white" />
+      </button>
+
+      <div className="text-center">
+        {uploading ? (
+          <p className="text-[15px] font-semibold text-ink">Saving…</p>
+        ) : recording ? (
+          <>
+            <p className="text-[20px] font-bold text-ink tabular-nums">{clock(rec.secs)}</p>
+            <p className="text-[13px] text-muted">
+              {rec.remaining <= 30 ? `${rec.remaining}s left — tap to stop` : "Tap to stop when you're done"}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-[15px] font-semibold text-ink">Tap to record your answer</p>
+            <p className="text-[13px] text-muted">Up to {Math.round(rec.maxSeconds / 60)} minutes. Speak naturally.</p>
+          </>
+        )}
+      </div>
+
+      {!recording && !uploading && (
+        <button onClick={onType} className="text-[13px] font-semibold text-red-text">
+          <Icon name="note-pencil" size={15} className="mr-1 inline text-current" />
+          Type it instead
+        </button>
+      )}
+    </div>
+  );
+}
+
+function RecordedAnswer({ answer, onDiscard }: { answer: Answer; onDiscard: () => void }) {
   return (
     <Card className="flex flex-col gap-4">
-      <div className="flex items-start gap-4">
-        <span className={cx("grid h-8 w-8 flex-none place-items-center rounded-full text-[13px] font-bold", done ? "bg-red text-white" : "bg-blush-100 text-red-text")}>
-          {done ? <Icon name="check" size={16} className="text-white" /> : p.n}
+      <div className="flex items-center gap-3">
+        <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-red">
+          <Icon name="check" size={20} className="text-white" />
         </span>
-        <p className="pt-1 text-[16px] font-medium text-ink">{p.q.q}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-semibold text-ink">Answer recorded</p>
+          <p className="text-[13px] text-muted">{answer.transcript ? "Transcribed" : "Transcribing in the background…"}</p>
+        </div>
+        <button onClick={onDiscard} aria-label="Discard recording" className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted hover:bg-blush-50 hover:text-red-text">
+          <Icon name="trash" size={18} className="text-current" />
+        </button>
       </div>
-      <Textarea
-        disabled={!p.editable}
-        value={text}
-        placeholder="Type your answer, or record it below…"
-        onChange={(e) => {
-          setText(e.target.value);
-          setSaved(false);
-        }}
-        onBlur={save}
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        {p.editable && <Recorder onDone={upload} disabled={busy} label={a.audio ? "Re-record" : "Record answer"} />}
-        {a.audio && <audio src={a.audio} controls className="h-9 max-w-[260px]" />}
-        {busy && !a.transcript && <span className="text-[13px] text-muted">Transcribing…</span>}
-        {!saved && <span className="text-[12px] text-muted">Unsaved, saves when you click away</span>}
-        {err && <span className="text-[13px] text-red-text">{err}</span>}
-      </div>
-      {a.transcript && (
-        <div className="rounded-[16px] bg-blush-50 px-4 py-3 text-[14px] text-ink-soft">
+      {answer.audio && <audio src={answer.audio} controls className="h-10 w-full" />}
+      {answer.transcript && (
+        <div className="rounded-[16px] bg-blush-50 px-4 py-3">
           <Label>Transcript</Label>
-          <p className="mt-1">{a.transcript}</p>
+          <p className="mt-1 text-[14px] text-ink-soft">{answer.transcript}</p>
         </div>
       )}
     </Card>
   );
 }
 
-function Slider({ label, left, right, value, onChange, disabled }: { label: string; left: string; right: string; value: number; onChange: (v: number) => void; disabled: boolean }) {
+// ── Review and finish ─────────────────────────────────────────────────────
+
+function Review(p: {
+  questions: { key: string; q: string }[];
+  answers: Record<string, Answer>;
+  userId: string;
+  editable: boolean;
+  onJump: (i: number) => void;
+}) {
+  return (
+    <div className="mx-auto w-full max-w-xl py-4">
+      <ul className="flex flex-col gap-2">
+        {p.questions.map((q, i) => {
+          const a = p.answers[q.key];
+          const done = answeredQ(a);
+          const waiting = !!a?.audio && !a?.transcript;
+          const body = a?.transcript ?? a?.text ?? "";
+          return (
+            <li key={q.key}>
+              <button
+                onClick={() => p.editable && p.onJump(i)}
+                disabled={!p.editable}
+                className={cx(
+                  "flex w-full items-start gap-3 rounded-[16px] px-4 py-3 text-left transition-colors",
+                  p.editable && "hover:bg-blush-50",
+                )}
+              >
+                <span
+                  className={cx(
+                    "mt-0.5 grid h-7 w-7 flex-none place-items-center rounded-full text-[12px] font-bold",
+                    done ? "bg-red text-white" : "bg-blush-100 text-red-text",
+                  )}
+                >
+                  {done ? <Icon name="check" size={14} className="text-white" /> : i + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-medium text-ink">{q.q}</span>
+                  {body ? (
+                    <span className="mt-0.5 line-clamp-2 text-[13px] text-muted">{body}</span>
+                  ) : waiting ? (
+                    <span className="mt-0.5 block text-[13px] text-muted">Voice note saved · transcribing…</span>
+                  ) : (
+                    <span className="mt-0.5 block text-[13px] text-graphite-500">Not answered yet</span>
+                  )}
+                </span>
+                {p.editable && <Icon name="caret-right" size={16} className="mt-1 flex-none text-graphite-300" />}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Completing step 3 is refused server-side while a transcript is outstanding. That
+ * is the right invariant, so this waits it out visibly instead of surfacing it as
+ * an error — by this point the recordings made earlier have usually finished.
+ */
+function Finish({ userId, answered, pending }: { userId: string; answered: number; pending: number }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const enough = answered >= MIN;
+
+  return (
+    <div className="mx-auto w-full max-w-xl pt-6">
+      {err && <p className="mb-4 rounded-[16px] bg-blush-50 px-4 py-3 text-[14px] text-red-text">{err}</p>}
+      <Button
+        className="w-full"
+        disabled={!enough || busy || pending > 0}
+        onClick={async () => {
+          setBusy(true);
+          setErr(null);
+          try {
+            await api(`/api/users/${userId}/onboarding/step`, { body: { step: 3 } });
+            router.push("/onboarding/persona");
+            router.refresh();
+          } catch (e) {
+            setErr((e as Error).message);
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Building…" : "Build my persona"}
+        <Icon name="sparkle" size={18} className="text-current" />
+      </Button>
+      <p className="mt-3 text-center text-[13px] text-muted">
+        {pending > 0
+          ? `Finishing ${pending} voice note${pending > 1 ? "s" : ""}…`
+          : enough
+            ? `${answered} answers ready`
+            : `Answer ${MIN - answered} more to continue`}
+      </p>
+    </div>
+  );
+}
+
+// ── Preferences and samples ───────────────────────────────────────────────
+
+function Slider({ label, left, right, value, onChange }: { label: string; left: string; right: string; value: number; onChange: (v: number) => void }) {
   return (
     <label className="flex flex-col gap-2">
-      <span className="text-[13px] font-semibold text-ink">{label}</span>
-      <input type="range" min={0} max={1} step={0.1} value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))} className="accent-[var(--red)]" />
+      <span className="text-[14px] font-semibold text-ink">{label}</span>
+      <input type="range" min={0} max={1} step={0.1} value={value} onChange={(e) => onChange(Number(e.target.value))} className="h-6 accent-[var(--red)]" />
       <span className="flex justify-between text-[12px] text-muted">
         <span>{left}</span>
         <span>{right}</span>
@@ -147,19 +538,21 @@ function Slider({ label, left, right, value, onChange, disabled }: { label: stri
   );
 }
 
-function Choice({ label, options, value, onChange, disabled }: { label: string; options: [string, string][]; value: string; onChange: (v: string) => void; disabled: boolean }) {
+function Choice({ label, options, value, onChange }: { label: string; options: [string, string][]; value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-col gap-2">
-      <span className="text-[13px] font-semibold text-ink">{label}</span>
+      <span className="text-[14px] font-semibold text-ink">{label}</span>
       <div className="flex flex-wrap gap-2">
         {options.map(([v, l]) => (
           <button
             type="button"
             key={v}
-            disabled={disabled}
             aria-pressed={value === v}
             onClick={() => onChange(v)}
-            className={cx("h-9 rounded-[16px] px-3 text-[13px] font-medium", value === v ? "bg-red text-white" : "bg-blush-50 text-ink-soft hover:bg-blush-100")}
+            className={cx(
+              "h-11 rounded-[16px] px-4 text-[14px] font-medium transition-colors",
+              value === v ? "bg-red text-white" : "bg-blush-50 text-ink-soft hover:bg-blush-100",
+            )}
           >
             {l}
           </button>
@@ -169,7 +562,7 @@ function Choice({ label, options, value, onChange, disabled }: { label: string; 
   );
 }
 
-function ToneSliders({ userId, initial, editable }: { userId: string; initial: Record<string, string>; editable: boolean }) {
+function ToneSliders({ userId, initial, onDone }: { userId: string; initial: Record<string, string>; onDone: () => void }) {
   const [v, setV] = useState({
     "pref.formality": initial["pref.formality"] || "0.5",
     "pref.personal": initial["pref.personal"] || "0.5",
@@ -179,41 +572,45 @@ function ToneSliders({ userId, initial, editable }: { userId: string; initial: R
   });
   const first = useRef(true);
   useEffect(() => {
-    if (first.current) {
-      first.current = false;
-      // Persist defaults once so the persona always has preferences to work from.
-      if (Object.keys(initial).every((k) => !initial[k]) && editable)
-        Object.entries(v).forEach(([k, val]) => api(`/api/users/${userId}/answers/${k}`, { method: "PUT", body: { text: val } }));
-      return;
-    }
+    if (!first.current) return;
+    first.current = false;
+    // Persist the defaults once so the persona always has preferences to work from.
+    if (Object.keys(initial).every((k) => !initial[k]))
+      Object.entries(v).forEach(([k, val]) => api(`/api/users/${userId}/answers/${k}`, { method: "PUT", body: { text: val } }).catch(() => {}));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const set = (k: keyof typeof v) => (val: string | number) => {
     const s = String(val);
     setV((prev) => ({ ...prev, [k]: s }));
-    api(`/api/users/${userId}/answers/${k}`, { method: "PUT", body: { text: s } });
+    api(`/api/users/${userId}/answers/${k}`, { method: "PUT", body: { text: s } }).catch(() => {});
   };
+
   return (
-    <section className="mt-12">
-      <h2 className="card-title mb-4">Tone preferences</h2>
-      <Card className="grid gap-8 md:grid-cols-2">
-        <Slider label="Formality" left="Conversational" right="Formal" value={Number(v["pref.formality"])} onChange={set("pref.formality")} disabled={!editable} />
-        <Slider label="Openness" left="Reserved" right="Personal" value={Number(v["pref.personal"])} onChange={set("pref.personal")} disabled={!editable} />
-        <Choice label="Length" value={v["pref.length"]} onChange={set("pref.length")} disabled={!editable} options={[["short", "Concise"], ["medium", "Medium"], ["long", "Detailed"]]} />
-        <Choice label="Emoji" value={v["pref.emoji"]} onChange={set("pref.emoji")} disabled={!editable} options={[["none", "Never"], ["rare", "Rarely"], ["some", "Sometimes"]]} />
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 py-6">
+      <div>
+        <h2 className="text-[24px] leading-tight font-semibold text-ink sm:text-[28px]">How should it sound?</h2>
+        <p className="mt-2 text-[15px] text-muted">You can change any of this later.</p>
+      </div>
+      <Card className="flex flex-col gap-7">
+        <Slider label="Formality" left="Conversational" right="Formal" value={Number(v["pref.formality"])} onChange={set("pref.formality")} />
+        <Slider label="Openness" left="Reserved" right="Personal" value={Number(v["pref.personal"])} onChange={set("pref.personal")} />
+        <Choice label="Length" value={v["pref.length"]} onChange={set("pref.length")} options={[["short", "Concise"], ["medium", "Medium"], ["long", "Detailed"]]} />
+        <Choice label="Emoji" value={v["pref.emoji"]} onChange={set("pref.emoji")} options={[["none", "Never"], ["rare", "Rarely"], ["some", "Sometimes"]]} />
         <Choice
           label="Hashtags"
           value={v["pref.hashtags"]}
           onChange={set("pref.hashtags")}
-          disabled={!editable}
-          options={[["none", "None"], ["max 3, at end", "Up to 3, at the end"], ["3 to 5, at end", "3 to 5, at the end"]]}
+          options={[["none", "None"], ["max 3, at end", "Up to 3"], ["3 to 5, at end", "3 to 5"]]}
         />
       </Card>
-    </section>
+      <Button className="mt-auto w-full" onClick={onDone}>
+        Continue <Icon name="arrow-right" size={18} className="text-current" />
+      </Button>
+    </div>
   );
 }
 
-function Samples({ userId, initial, editable }: { userId: string; initial: Sample[]; editable: boolean }) {
-  const router = useRouter();
+function Samples({ userId, initial, onDone }: { userId: string; initial: Sample[]; onDone: () => void }) {
   const [samples, setSamples] = useState(initial);
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -222,7 +619,7 @@ function Samples({ userId, initial, editable }: { userId: string; initial: Sampl
   async function add() {
     setErr(null);
     try {
-      const { sample } = await api(`/api/users/${userId}/samples`, { body: { text, source: "paste" } });
+      const { sample } = await api<{ sample: Sample }>(`/api/users/${userId}/samples`, { body: { text, source: "paste" } });
       setSamples([...samples, sample]);
       setText("");
     } catch (e) {
@@ -240,48 +637,50 @@ function Samples({ userId, initial, editable }: { userId: string; initial: Sampl
   }
 
   return (
-    <section className="mt-12">
-      <div className="mb-4 flex items-baseline justify-between gap-4">
-        <h2 className="card-title">Writing samples</h2>
-        <span className="text-[13px] text-muted">{samples.length} of 10 · optional, strongly encouraged</span>
+    <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 py-6">
+      <div>
+        <h2 className="text-[24px] leading-tight font-semibold text-ink sm:text-[28px]">Anything you've written?</h2>
+        <p className="mt-2 text-[15px] text-muted">
+          Past posts, a speech, an email. These teach the persona your real voice — optional, but they help a lot.
+        </p>
       </div>
-      <Card className="flex flex-col gap-4">
-        <p className="text-[14px] text-muted">Paste 3 to 10 things you've written: past LinkedIn posts, a speech, an email. These teach the persona your real voice.</p>
-        {samples.map((s) => (
-          <div key={s.id} className="flex items-start gap-3 rounded-[16px] bg-blush-50 px-4 py-3">
-            <Icon name="note-pencil" size={18} className="mt-0.5 text-red" />
-            <p className="line-clamp-2 flex-1 text-[14px] text-ink-soft">{s.text}</p>
-            {editable && (
-              <button
-                aria-label="Remove sample"
-                className="text-muted hover:text-red-text"
-                onClick={async () => {
-                  await api(`/api/users/${userId}/samples/${s.id}`, { method: "DELETE" });
-                  setSamples(samples.filter((x) => x.id !== s.id));
-                  router.refresh();
-                }}
-              >
-                <Icon name="trash" size={18} className="text-current" />
-              </button>
-            )}
+
+      {samples.map((s) => (
+        <div key={s.id} className="flex items-start gap-3 rounded-[16px] bg-blush-50 px-4 py-3">
+          <Icon name="note-pencil" size={18} className="mt-0.5 flex-none text-red" />
+          <p className="line-clamp-2 flex-1 text-[14px] text-ink-soft">{s.text}</p>
+          <button
+            aria-label="Remove sample"
+            className="flex-none text-muted hover:text-red-text"
+            onClick={async () => {
+              await api(`/api/users/${userId}/samples/${s.id}`, { method: "DELETE" }).catch(() => {});
+              setSamples(samples.filter((x) => x.id !== s.id));
+            }}
+          >
+            <Icon name="trash" size={18} className="text-current" />
+          </button>
+        </div>
+      ))}
+
+      {samples.length < 10 && (
+        <div className="flex flex-col gap-3">
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste a post, speech or email…" className="min-h-32" />
+          {err && <span className="text-[13px] text-red-text">{err}</span>}
+          <div className="flex flex-wrap gap-3">
+            <Button size="sm" variant="secondary" disabled={text.trim().length < 40} onClick={add}>
+              Add sample
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()}>
+              <Icon name="upload-simple" size={16} className="text-current" /> Upload .txt
+            </Button>
+            <input ref={fileRef} type="file" accept=".txt,.md,text/plain" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
           </div>
-        ))}
-        {editable && samples.length < 10 && (
-          <>
-            <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste a post, speech or email…" />
-            {err && <span className="text-[13px] text-red-text">{err}</span>}
-            <div className="flex flex-wrap gap-3">
-              <Button size="sm" variant="secondary" disabled={text.trim().length < 40} onClick={add}>
-                Add sample
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()}>
-                <Icon name="upload-simple" size={16} className="text-current" /> Upload .txt
-              </Button>
-              <input ref={fileRef} type="file" accept=".txt,.md,text/plain" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-            </div>
-          </>
-        )}
-      </Card>
-    </section>
+        </div>
+      )}
+
+      <Button className="mt-auto w-full" onClick={onDone}>
+        {samples.length ? "Continue" : "Skip for now"} <Icon name="arrow-right" size={18} className="text-current" />
+      </Button>
+    </div>
   );
 }
