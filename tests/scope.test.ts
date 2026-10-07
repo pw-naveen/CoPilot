@@ -75,6 +75,16 @@ export const SPECS: Spec[] = [
   { route: "users/[userId]/cadence/preview", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ postsPerWeek: 2, weekdays: [2, 4], times: ["09:00", "09:00"] }) },
   { route: "users/[userId]/slots", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
   { route: "slots/[slotId]/skip", method: "POST", kind: "scoped", params: (f, t) => ({ slotId: f.slot(t) }) },
+  // WhatsApp
+  { route: "users/[userId]/whatsapp", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
+  { route: "users/[userId]/whatsapp/verify", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({}) },
+  { route: "admin/whatsapp", method: "GET", kind: "admin-only" },
+  { route: "admin/whatsapp", method: "POST", kind: "admin-only", body: () => ({ action: "check" }) },
+  { route: "webhooks/evolution", method: "POST", kind: "public" }, // shared-secret check, tested in whatsapp.test.ts
+  { route: "dev/phone", method: "GET", kind: "public" }, // DEV_TOOLS only
+  { route: "dev/phone", method: "POST", kind: "public" }, // DEV_TOOLS only
+  { route: "dev/clock", method: "GET", kind: "public" }, // DEV_TOOLS only
+  { route: "dev/clock", method: "POST", kind: "public" }, // DEV_TOOLS only
 ];
 
 const API_DIR = join(process.cwd(), "src/app/api");
@@ -180,6 +190,21 @@ describe("scope", () => {
         });
     });
   }
+});
+
+describe("dev tools", () => {
+  it("are unreachable when DEV_TOOLS is off", async () => {
+    process.env.DEV_TOOLS = "0";
+    try {
+      for (const r of ["dev/phone", "dev/clock"]) {
+        const mod = await load(r);
+        expect((await call(mod.GET, { path: `/api/${r}?phone=%2B1` })).status).toBe(404);
+        expect((await call(mod.POST, { body: { from: "+1", text: "x" } })).status).toBe(404);
+      }
+    } finally {
+      process.env.DEV_TOOLS = "1";
+    }
+  });
 });
 
 describe("lists are filtered to scope", () => {

@@ -156,13 +156,16 @@ export function classify(text: string, ctx: { pendingDraft: boolean; today: stri
     return { ...base, intent: "persona_preference", preference: t };
   if (ctx.pendingDraft && /^(make|change|shorter|longer|less|more|remove|add|can you|please (make|change|remove|add)|tone|too )/.test(lower))
     return { ...base, intent: "feedback", feedback: t };
-  if (/\?\s*$/.test(t) && !/\b(post|write)\b/.test(lower)) return { ...base, intent: "question", question: t };
+  const asks = /\?\s*$/.test(t) && /^(when|what|how|why|who|where|which|is|are|do|does|did|can|could|will|should)\b/.test(lower);
+  if (asks && !/^(can|could) you (write|post|draft)/.test(lower)) return { ...base, intent: "question", question: t };
   if (/^(hi|hello|hey|thanks|thank you|thx)[.! ]*$/i.test(t)) return base;
 
   let requested = "";
   const today = DateTime.fromISO(ctx.today, { zone: ctx.timezone });
-  const wd = WEEKDAYS.findIndex((d) => lower.includes(d));
-  if (wd >= 0 && /\b(on|for|this|next)\b/.test(lower)) {
+  // Only a day the post should go out on counts ("post this on Friday"), not when something happened.
+  const dayWanted = lower.match(new RegExp(`\\b(?:post|publish|share|schedule|put)\\b[^.?!]*?\\b(?:on|for)\\s+(?:this\\s+|next\\s+)?(${WEEKDAYS.join("|")})`)) ?? lower.match(new RegExp(`^for (?:this |next )?(${WEEKDAYS.join("|")})`));
+  const wd = dayWanted ? WEEKDAYS.indexOf(dayWanted[1]) : -1;
+  if (wd >= 0) {
     let d = today.plus({ days: 1 });
     while (d.weekday !== wd + 1) d = d.plus({ days: 1 });
     requested = d.toISODate()!;

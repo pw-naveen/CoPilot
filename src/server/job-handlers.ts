@@ -22,4 +22,15 @@ export const handlers: Record<JobKind, Handler> = {
   persona_generate: (userId, input) => generatePersona(userId, input.note as string | undefined, (input.by as string) ?? "system:synthesis"),
   tone_generate: (userId) => generateToneSamples(userId),
   tone_feedback: (userId, input) => processToneFeedback(userId, input.sampleId as string, input.by as string),
+  async wa_check() {
+    const { checkConnection } = await import("./whatsapp");
+    return checkConnection();
+  },
+  async wa_register_webhook() {
+    const { gateway, webhookUrl, checkConnection } = await import("./whatsapp");
+    const g = gateway();
+    if (!g.registerWebhook) return { ok: true, note: "This gateway doesn't use webhooks" };
+    await g.registerWebhook(await webhookUrl());
+    return { ok: true, status: await checkConnection() };
+  },
 };

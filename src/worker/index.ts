@@ -1,22 +1,39 @@
 import "dotenv/config";
-import { Worker } from "bullmq";
+import { Worker, type Processor } from "bullmq";
 import { QUEUES, queue, redis } from "@/server/queue";
-import { cronJobs, runCron } from "@/server/cron";
 import { runJob } from "@/server/jobs";
+import { cronJobs, runCron } from "@/server/cron";
+import { processWebhook } from "@/server/whatsapp/inbound";
+import { processBundle } from "@/server/whatsapp/bundle";
+import { deliver } from "@/server/whatsapp/outbox";
+import { generateDraftForSlot, refreshPersonaFromEdits, reviseDraft } from "@/server/services/posts";
 
 /**
  * Background worker: runs every OpenAI and WhatsApp call so slow responses never
  * block the web app. Start with `npm run worker`.
  */
 const workers: Worker[] = [];
+const add = (name: string, fn: Processor, concurrency = 4) => workers.push(new Worker(name, fn, { connection: redis(), concurrency }));
 
-workers.push(
-  new Worker(QUEUES.jobs, async (job) => runJob(job.data.id), { connection: redis(), concurrency: 4 }),
-);
+add(QUEUES.jobs, async (job) => runJob(job.data.id));
 
-workers.push(new Worker(QUEUES.cron, async (job) => runCron(job.name), { connection: redis(), concurrency: 1 }));
+add(QUEUES.inbound, async (job) => {
+  if (job.name === "webhook") return processWebhook(job.data.source, job.data.payload).then((e) => e.length);
+  if (job.name === "bundle") return processBundle(job.data.bundleId);
+});
 
-// Register repeatable jobs (idempotent: same scheduler id replaces the old one).
+// One at a time, so sends stay spaced out.
+add(QUEUES.outbox, async (job) => deliver(job.data.id), 1);
+
+add(QUEUES.drafts, async (job) => {
+  if (job.name === "generate") return generateDraftForSlot(job.data.slotId, job.data);
+  if (job.name === "revise") return reviseDraft(job.data);
+  if (job.name === "persona-refresh") return refreshPersonaFromEdits(job.data.userId);
+}, 2);
+
+add(QUEUES.cron, async (job) => runCron(job.name), 1);
+
+// Register repeatable jobs (same scheduler id replaces the old definition).
 for (const [name, def] of Object.entries(cronJobs)) {
   await queue(QUEUES.cron).upsertJobScheduler(name, { every: def.every }, { name });
 }
