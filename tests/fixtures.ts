@@ -15,7 +15,7 @@ export async function makeFixtures(p: People) {
     samples: [],
     golden: [],
   });
-  const ids: Record<string, Record<T, string>> = { sample: {} as any, toneSample: {} as any, job: {} as any };
+  const ids: Record<string, Record<T, string>> = { sample: {} as any, toneSample: {} as any, job: {} as any, slot: {} as any };
   for (const t of ["in", "out"] as T[]) {
     const u = users[t];
     await db.insert(schema.auditLog).values({ actorType: "system", actorId: "seed", userId: u.id, action: "seed", entity: "user", entityId: u.id });
@@ -26,6 +26,9 @@ export async function makeFixtures(p: People) {
     ids.sample[t] = s.id;
     ids.toneSample[t] = ts.id;
     ids.job[t] = j.id;
+    const publishAt = new Date(Date.now() + 10 * 86_400_000);
+    const [sl] = await db.insert(schema.slots).values({ userId: u.id, publishAt, approvalDeadline: new Date(publishAt.getTime() - 48 * 3600_000) }).returning();
+    ids.slot[t] = sl.id;
   }
   return {
     subId: p.sub.id,
@@ -35,6 +38,7 @@ export async function makeFixtures(p: People) {
     sample: (t: T) => ids.sample[t],
     toneSample: (t: T) => ids.toneSample[t],
     job: (t: T) => ids.job[t],
+    slot: (t: T) => ids.slot[t],
   };
 }
 

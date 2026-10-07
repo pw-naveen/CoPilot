@@ -69,6 +69,12 @@ export const SPECS: Spec[] = [
   { route: "users/[userId]/tone", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
   { route: "users/[userId]/tone/[sampleId]", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, sampleId: f.toneSample(t) }), body: () => ({ verdict: "close", comment: "less corporate" }) },
   { route: "jobs/[jobId]", method: "GET", kind: "scoped", params: (f, t) => ({ jobId: f.job(t) }) },
+  // cadence & calendar
+  { route: "users/[userId]/cadence", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
+  { route: "users/[userId]/cadence", method: "PUT", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ postsPerWeek: 2, weekdays: [2, 4], times: ["09:00", "09:00"] }) },
+  { route: "users/[userId]/cadence/preview", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ postsPerWeek: 2, weekdays: [2, 4], times: ["09:00", "09:00"] }) },
+  { route: "users/[userId]/slots", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
+  { route: "slots/[slotId]/skip", method: "POST", kind: "scoped", params: (f, t) => ({ slotId: f.slot(t) }) },
 ];
 
 const API_DIR = join(process.cwd(), "src/app/api");

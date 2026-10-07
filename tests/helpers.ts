@@ -2,12 +2,14 @@ import { NextRequest } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createSession } from "@/server/auth";
+import { resetClockCache } from "@/server/clock";
 
 export async function resetDb() {
   const tables = Object.values(schema)
     .filter((t: any) => t && typeof t === "object" && Symbol.for("drizzle:Name") in t)
     .map((t: any) => `"${t[Symbol.for("drizzle:Name")]}"`);
   await db.execute(sql.raw(`TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE`));
+  resetClockCache();
 }
 
 export async function seedPeople() {

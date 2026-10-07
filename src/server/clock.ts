@@ -23,6 +23,11 @@ export async function now(): Promise<Date> {
   return new Date(Date.now() + (await offset()));
 }
 
+/** Tests reset the database underneath the cache. */
+export function resetClockCache() {
+  cache = null;
+}
+
 export async function getOffsetMs() {
   return offset();
 }
