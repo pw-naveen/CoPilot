@@ -22,7 +22,7 @@ function errorResponse(err: unknown) {
 
 /** An authenticated API route. Scope checks happen in the data layer the handler calls. */
 export function route<P = Record<string, string>>(fn: (ctx: Ctx<P>) => Promise<unknown>) {
-  return async (req: NextRequest, rc?: RouteCtx<P>) => {
+  return async (req: NextRequest, rc: RouteCtx<P>) => {
     try {
       const session = await resolveSession(req.cookies.get(SESSION_COOKIE)?.value);
       if (!session) throw unauthorized();
@@ -37,7 +37,7 @@ export function route<P = Record<string, string>>(fn: (ctx: Ctx<P>) => Promise<u
 
 /** A route with no session (login, webhooks, tokenised preview). */
 export function publicRoute<P = Record<string, string>>(fn: (ctx: { req: NextRequest; params: P }) => Promise<unknown>) {
-  return async (req: NextRequest, rc?: RouteCtx<P>) => {
+  return async (req: NextRequest, rc: RouteCtx<P>) => {
     try {
       const params = ((await rc?.params) ?? {}) as P;
       return toResponse(await fn({ req, params }));

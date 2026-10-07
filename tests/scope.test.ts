@@ -52,6 +52,23 @@ export const SPECS: Spec[] = [
   { route: "admin/users/[userId]", method: "PATCH", kind: "scoped", roles: ["admin", "sub"], params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ staffApprovalIsFinal: false }) },
   { route: "admin/users/[userId]/reinvite", method: "POST", kind: "scoped", roles: ["admin", "sub"], params: (f, t) => ({ userId: f.user(t).id }) },
   { route: "admin/audit", method: "GET", kind: "scoped", roles: ["admin", "sub"], query: (f, t) => `?userId=${f.user(t).id}` },
+  // per-account setup (user acts on themselves; staff on their scope)
+  { route: "files/[...key]", method: "GET", kind: "public" }, // HMAC-signed URLs only
+  { route: "users/[userId]/onboarding", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
+  { route: "users/[userId]/onboarding/step", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ step: 2 }) },
+  { route: "users/[userId]/profile", method: "PUT", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: (f, t) => ({ name: f.user(t).name, displayName: f.user(t).displayName, languages: ["en"], timezone: "Asia/Kuala_Lumpur" }) },
+  { route: "users/[userId]/answers/[key]", method: "PUT", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, key: "career_story" }), body: () => ({ text: "Twenty years in cardiology." }) },
+  { route: "users/[userId]/answers/[key]/audio", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, key: "career_story" }), body: () => undefined },
+  { route: "users/[userId]/samples", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ text: "A sample long enough to be accepted by the sample validator, honestly." }) },
+  { route: "users/[userId]/samples/[sampleId]", method: "DELETE", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, sampleId: f.sample(t) }) },
+  { route: "users/[userId]/persona", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
+  { route: "users/[userId]/persona", method: "PUT", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: (f) => ({ json: f.personaJson }) },
+  { route: "users/[userId]/persona/generate", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ note: "" }) },
+  { route: "users/[userId]/persona/restore", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ version: 1 }) },
+  { route: "users/[userId]/tone", method: "GET", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
+  { route: "users/[userId]/tone", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id }) },
+  { route: "users/[userId]/tone/[sampleId]", method: "POST", kind: "scoped", params: (f, t) => ({ userId: f.user(t).id, sampleId: f.toneSample(t) }), body: () => ({ verdict: "close", comment: "less corporate" }) },
+  { route: "jobs/[jobId]", method: "GET", kind: "scoped", params: (f, t) => ({ jobId: f.job(t) }) },
 ];
 
 const API_DIR = join(process.cwd(), "src/app/api");

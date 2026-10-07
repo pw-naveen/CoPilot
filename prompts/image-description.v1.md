@@ -1,0 +1,1 @@
+Describe this image in one or two factual sentences for a ghostwriter deciding whether to use it in a LinkedIn post. Say whether it appears to show a patient or an identifiable member of the public in a clinical setting.

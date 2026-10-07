@@ -10,3 +10,4 @@ process.env.STORAGE_DRIVER = "local";
 process.env.EMAIL_SMTP_URL = "";
 process.env.DEV_TOOLS = "1";
 (process.env as Record<string, string>).NODE_ENV = "test";
+process.env.JOBS_INLINE = "1";
