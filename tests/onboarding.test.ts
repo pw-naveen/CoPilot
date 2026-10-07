@@ -63,7 +63,7 @@ describe("onboarding steps 2–5", () => {
     expect(r.status).toBe(200);
     const ans = await db.query.onboardingAnswers.findFirst({ where: eq(schema.onboardingAnswers.questionKey, "proud_moment") });
     expect(ans?.audioUrl).toBeTruthy();
-    expect(ans?.transcript).toContain("transcript");
+    expect(ans?.transcript?.length ?? 0).toBeGreaterThan(20);
 
     await call(samplesRoute.POST, { cookie, params: P(), body: { text: "Last week a junior nurse spotted what three of us missed. That's the culture I want: speak up, every time." } });
 

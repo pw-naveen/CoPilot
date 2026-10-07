@@ -246,3 +246,55 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "alert"; c
     </div>
   );
 }
+
+/**
+ * Circular progress. `value` and `max` are counts, not percentages, so the ring
+ * and the "3 of 12" label can never disagree.
+ */
+export function ProgressRing({
+  value,
+  max,
+  size = 56,
+  stroke = 5,
+  children,
+  className,
+}: {
+  value: number;
+  max: number;
+  size?: number;
+  stroke?: number;
+  children?: ReactNode;
+  className?: string;
+}) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
+  return (
+    <span
+      className={cx("relative grid flex-none place-items-center", className)}
+      style={{ width: size, height: size }}
+      role="progressbar"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-label={`${value} of ${max} answered`}
+    >
+      <svg width={size} height={size} className="-rotate-90" aria-hidden>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--blush-100)" strokeWidth={stroke} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="var(--red)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct)}
+          style={{ transition: "stroke-dashoffset 500ms cubic-bezier(0.22, 1, 0.36, 1)" }}
+        />
+      </svg>
+      <span className="absolute grid place-items-center text-[12px] font-bold text-ink tabular-nums">{children}</span>
+    </span>
+  );
+}

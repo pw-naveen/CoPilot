@@ -227,7 +227,7 @@ export function PostWorkspace({ view: initial, apiBase, mode, isAdmin = false }:
             {view.post.suggestedTopic && <span className="text-[12px] font-semibold text-red-text">Suggested topic</span>}
           </div>
           {view.slot && (
-            <dl className="grid grid-cols-[96px_1fr] gap-y-2 text-[14px]">
+            <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-y-2 text-[14px]">
               <dt className="text-muted">Goes out</dt>
               <dd className="font-semibold text-ink">{fmt(view.slot.publishAt)}</dd>
               <dt className="text-muted">Approve by</dt>

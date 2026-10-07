@@ -70,7 +70,7 @@ export function CadenceEditor({
 
   const fmt = (iso: string, f: string) => DateTime.fromISO(iso, { zone: timezone }).toFormat(f);
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[1fr_1fr]">
+    <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <Card className="flex flex-col gap-7">
         <div>
           <Label>Posts a week</Label>

@@ -24,7 +24,8 @@ export default async function StepPage({ params }: { params: Promise<{ step: str
 
   return (
     <>
-      <Stepper current={step} reached={reached} />
+      {/* Step 3 takes over the viewport, so the stepper would only sit behind it. */}
+      {step !== 3 && <Stepper current={step} reached={reached} />}
       {step === 2 && <ProfileStep user={s.user} editable={editable} />}
       {step === 3 && (
         <VoiceStep

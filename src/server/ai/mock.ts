@@ -225,6 +225,41 @@ export function revise(a: { persona: Persona; text: string; feedback: string }) 
   return { text, summary: `Revised: ${a.feedback.slice(0, 60)}`, first_comment: "" };
 }
 
-export function transcript(audio: Buffer) {
+/**
+ * Plausible spoken answers, one per question. The mock can't hear the audio, so
+ * returning a placeholder would feed that placeholder into the persona and make
+ * every voice-recorded setup produce nonsense. Answer-shaped text keeps the rest
+ * of the pipeline meaningful in development; a real key gives real transcripts.
+ */
+const SPOKEN: Record<string, string> = {
+  career_story:
+    "So I trained in general medicine first, and I spent a few years in a district hospital before I specialised. That period shaped everything really — you see what happens when people can't reach care in time. I moved into my specialty because I wanted to be closer to that problem, and I've been doing it about fifteen years now.",
+  known_for:
+    "I'd want to be known for the preventive side of the work, honestly. Not the dramatic stuff. The thing that actually changes outcomes happens years before anyone ends up in front of me, and I don't think we talk about that enough.",
+  audience:
+    "Mostly peers, and people who make policy decisions. I'm not really trying to reach patients directly — there are others doing that better. I want the conversation to be with the people who can change how the system works.",
+  causes:
+    "Access, mainly. The fact that where someone lives predicts their outcome more than almost anything clinical. And I care a lot about how exhausted the junior doctors are, because that's a safety issue nobody wants to name.",
+  topics_to_avoid:
+    "No politics, definitely. Nothing about individual patients even if it's anonymised. And I don't want to be seen endorsing any particular product or private group.",
+  formality:
+    "Somewhere in the middle. Like I'm talking to a colleague, not giving a lecture and not performing. Plain language. I'd rather be clear than sound clever.",
+  proud_moment:
+    "We set up a triage pathway at a couple of smaller hospitals last year. It's not glamorous, it's a protocol and a phone line really, but it cut the delay for transferred patients quite significantly. No award for it, but it's the best thing I've done.",
+  contrarian_view:
+    "I think we overvalue the procedural side and undervalue the unglamorous preventive work. A lot of what I do is salvage for a failure that happened a decade earlier. Most of my colleagues would find that an uncomfortable thing to say out loud.",
+  influences:
+    "A consultant I worked under early on. He did his rounds very early so he'd be there when families came, and he never raised his voice at anyone junior. I learned that most of leading is just turning up reliably and being safe to tell the truth to.",
+  personal_side:
+    "A little, where it's relevant. I'll talk about burnout, or the drive home after a bad day. I won't post about my family or my holidays, and definitely no photos of my children.",
+  phrases:
+    "I say the distance between things a lot — between the guideline and the ward, that kind of phrasing. I can't stand humbled to, or game-changer, or calling illness a battle. People aren't fighting anything, they're living with something.",
+  success:
+    "A few hundred of the right people reading properly, rather than thousands scrolling past. If one policy conversation came out of something I wrote, that would be enough. I've no interest in going viral.",
+};
+
+export function transcript(audio: Buffer, questionKey?: string) {
+  const spoken = questionKey ? SPOKEN[questionKey] : undefined;
+  if (spoken) return spoken;
   return `Voice note transcript (${Math.max(1, Math.round(audio.length / 1024))} KB of audio). In development the mock transcriber can't hear audio; set an OpenAI key for real transcripts.`;
 }

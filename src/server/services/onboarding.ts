@@ -110,6 +110,35 @@ export async function saveAudioAnswer(actor: AnyActor, userId: string, key: stri
   return enqueue("transcribe_answer", userId, { key, storageKey, mime: file.type });
 }
 
+/**
+ * Discards a recorded answer, so the user can type instead or record again.
+ * Without this a transcription that exhausts its retries would strand the user:
+ * step 3 refuses to complete while any answer has audio but no transcript, and
+ * saving text does not clear the audio.
+ */
+export async function clearAudioAnswer(actor: AnyActor, userId: string, key: string) {
+  await user(actor, userId);
+  if (!QUESTIONS.some((q) => q.key === key)) throw badRequest("Unknown question");
+  await db
+    .update(schema.onboardingAnswers)
+    .set({ audioUrl: null, transcript: null })
+    .where(and(eq(schema.onboardingAnswers.userId, userId), eq(schema.onboardingAnswers.questionKey, key)));
+}
+
+/** Just enough to drive the questionnaire's progress and pending-transcript state. */
+export async function answerStates(actor: AnyActor, userId: string) {
+  await user(actor, userId);
+  const rows = await db.query.onboardingAnswers.findMany({ where: eq(schema.onboardingAnswers.userId, userId) });
+  return {
+    answers: rows.map((a) => ({
+      key: a.questionKey,
+      text: a.text ?? "",
+      hasAudio: !!a.audioUrl,
+      transcript: a.transcript,
+    })),
+  };
+}
+
 export async function addSample(actor: AnyActor, userId: string, text: string, source: string) {
   await user(actor, userId);
   const count = (await db.query.writingSamples.findMany({ where: eq(schema.writingSamples.userId, userId) })).length;
