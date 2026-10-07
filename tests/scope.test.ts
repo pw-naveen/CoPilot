@@ -83,6 +83,14 @@ export const SPECS: Spec[] = [
   { route: "webhooks/evolution", method: "POST", kind: "public" }, // shared-secret check, tested in whatsapp.test.ts
   { route: "dev/phone", method: "GET", kind: "public" }, // DEV_TOOLS only
   { route: "dev/phone", method: "POST", kind: "public" }, // DEV_TOOLS only
+  // posts
+  { route: "posts/[postId]", method: "GET", kind: "scoped", params: (f, t) => ({ postId: f.post(t) }) },
+  { route: "posts/[postId]", method: "POST", kind: "scoped", params: (f, t) => ({ postId: f.post(t) }), body: () => ({ action: "edit", text: "Edited by scope test." }) },
+  { route: "posts/[postId]/audio", method: "POST", kind: "scoped", params: (f, t) => ({ postId: f.post(t) }), body: () => undefined },
+  { route: "preview/[token]", method: "GET", kind: "public" }, // token-scoped, tested in drafts.test.ts
+  { route: "preview/[token]", method: "POST", kind: "public" },
+  { route: "preview/[token]/audio", method: "POST", kind: "public" },
+  { route: "admin/board", method: "GET", kind: "scoped", roles: ["admin", "sub"], query: (f, t) => `?userId=${f.user(t).id}` },
   { route: "dev/clock", method: "GET", kind: "public" }, // DEV_TOOLS only
   { route: "dev/clock", method: "POST", kind: "public" }, // DEV_TOOLS only
 ];
@@ -190,6 +198,17 @@ describe("scope", () => {
         });
     });
   }
+});
+
+describe("preview tokens", () => {
+  it("only open their own post", async () => {
+    const { createPreviewLink } = await import("@/server/services/posts");
+    const token = (await createPreviewLink(f.post("in"))).split("/p/")[1];
+    const mod = await load("preview/[token]");
+    const r = await call(mod.GET, { params: { token } });
+    expect(r.json.post.id).toBe(f.post("in"));
+    expect((await call(mod.GET, { params: { token: "not-a-token" } })).status).toBe(404);
+  });
 });
 
 describe("dev tools", () => {

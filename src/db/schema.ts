@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   doublePrecision,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -250,17 +251,22 @@ export const slots = pgTable(
 
 // ── WhatsApp ──────────────────────────────────────────────────────────────
 
-export const inputBundles = pgTable("input_bundles", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  intent: intent("intent"),
-  extractedJson: jsonb("extracted_json"),
-  slotId: uuid("slot_id"),
-  closedAt: timestamp("closed_at", { withTimezone: true }),
-  ...timestamps,
-});
+export const inputBundles = pgTable(
+  "input_bundles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    intent: intent("intent"),
+    extractedJson: jsonb("extracted_json"),
+    slotId: uuid("slot_id"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  // At most one open bundle per user, even when messages arrive at the same instant.
+  (t) => [uniqueIndex("input_bundles_one_open").on(t.userId).where(sql`closed_at is null`)],
+);
 
 export const waMessages = pgTable(
   "wa_messages",

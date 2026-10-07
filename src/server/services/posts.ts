@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { actorRef, isAdmin, isStaff, SYSTEM, type AnyActor } from "../actor";
 import * as ai from "../ai";
@@ -62,8 +62,9 @@ export async function bundleInput(bundleId: string) {
   const keys = msgs.map((m) => m.mediaUrl).filter(Boolean) as string[];
   const media = keys.length ? await db.query.media.findMany({ where: inArray(schema.media.storageKey, keys) }) : [];
   const parts: string[] = [];
+  const { DONE_WORDS } = await import("../whatsapp/inbound");
   for (const m of msgs) {
-    if (m.body) parts.push(m.body);
+    if (m.body && !(DONE_WORDS.test(m.body.trim()) && !m.mediaUrl)) parts.push(m.body);
     if (m.transcript) parts.push(`(voice note) ${m.transcript}`);
     const im = media.find((x) => x.storageKey === m.mediaUrl);
     if (im) parts.push(`(photo) ${im.visionDescription ?? "an image"}`);
@@ -272,7 +273,8 @@ export async function editPostText(actor: AnyActor, postId: string, text: string
     .insert(schema.postVersions)
     .values({ postId, number: v.number + 1, text: text.trim(), media: v.media, personaVersion: v.personaVersion, createdBy: actorRef(actor) })
     .returning();
-  await setStatus(post, "pending_approval", { currentVersionId: nv.id, flaggedForStaff: isStaff(actor) ? false : post.flaggedForStaff });
+  // A flagged draft stays with staff until they release it explicitly.
+  await setStatus(post, "pending_approval", { currentVersionId: nv.id });
   await recordEdit(post.userId, postId, "inline_edit", v.text, nv.text, null);
   await audit(actor, { action: "post.edit", entity: "post", entityId: postId, userId: post.userId, before: { version: v.number }, after: { version: nv.number } });
   return nv;
@@ -406,3 +408,77 @@ export async function freeSlots(userId: string) {
 }
 
 export type { Slot };
+
+/** Everything the post workspace needs, scoped to the actor. */
+export async function postView(actor: AnyActor, postId: string) {
+  const post = await loadPost(actor, postId);
+  const user = (await db.query.users.findFirst({ where: eq(schema.users.id, post.userId) }))!;
+  const [versions, slot, uploads, free] = await Promise.all([
+    db.query.postVersions.findMany({ where: eq(schema.postVersions.postId, postId), orderBy: desc(schema.postVersions.number) }),
+    post.slotId ? db.query.slots.findFirst({ where: eq(schema.slots.id, post.slotId) }) : null,
+    db.query.media.findMany({ where: and(eq(schema.media.userId, post.userId)), orderBy: desc(schema.media.createdAt), limit: 24 }),
+    freeSlots(post.userId),
+  ]);
+  const staffIds = [post.staffApprovedBy, ...versions.map((v) => (v.createdBy.startsWith("staff:") ? v.createdBy.slice(6) : null))].filter(Boolean) as string[];
+  const staffRows = staffIds.length ? await db.query.staff.findMany({ where: inArray(schema.staff.id, staffIds) }) : [];
+  const who = (ref: string) =>
+    ref === "ai" ? "Assistant" : ref.startsWith("staff:") ? staffRows.find((s) => s.id === ref.slice(6))?.name ?? "Team" : ref.startsWith("user:") ? user.displayName : ref;
+  const media = await Promise.all(uploads.map(async (m) => ({ id: m.id, url: await storage().signedUrl(m.storageKey), description: m.visionDescription, consent: m.consentFlag })));
+  return {
+    post: {
+      id: post.id,
+      status: post.status,
+      summary: post.summary,
+      topic: post.topic,
+      firstComment: post.firstComment,
+      suggestedTopic: post.suggestedTopic,
+      flaggedForStaff: post.flaggedForStaff,
+      reviewIssues: (post.reviewIssues as string[] | null) ?? [],
+      staffApprovedBy: post.staffApprovedBy ? who(`staff:${post.staffApprovedBy}`) : null,
+      approvedAt: post.approvedAt,
+      approvedBy: post.approvedBy ? who(post.approvedBy) : null,
+      currentVersionId: post.currentVersionId,
+    },
+    user: { id: user.id, displayName: user.displayName, headline: [user.title, user.org].filter(Boolean).join(" · "), photoUrl: user.photoUrl, timezone: user.timezone, staffApprovalIsFinal: user.staffApprovalIsFinal },
+    slot: slot ? { id: slot.id, publishAt: slot.publishAt, approvalDeadline: slot.approvalDeadline, status: slot.status } : null,
+    versions: versions.map((v) => ({ id: v.id, number: v.number, text: v.text, media: v.media, createdBy: who(v.createdBy), byStaff: v.createdBy.startsWith("staff:"), feedback: v.feedback, createdAt: v.createdAt, personaVersion: v.personaVersion, promptVersion: v.promptVersion })),
+    media,
+    freeSlots: free.map((s) => ({ id: s.id, publishAt: s.publishAt })),
+  };
+}
+
+export type PostView = Awaited<ReturnType<typeof postView>>;
+
+/** A preview link acts as the post's user, for this post only. */
+export async function previewActor(token: string) {
+  const post = await resolvePreview(token);
+  if (!post) throw notFound("This link has expired or the post is already approved");
+  const u = (await db.query.users.findFirst({ where: eq(schema.users.id, post.userId) }))!;
+  return { post, actor: { type: "user" as const, id: u.id, name: u.displayName, email: u.email } };
+}
+
+/** Board for staff: every post in scope, at-risk first. */
+export async function board(actor: AnyActor, opts: { userId?: string; weekStart?: Date } = {}) {
+  if (!isStaff(actor)) throw notFound();
+  const { scopeWhere } = await import("../scope");
+  const now = await clockNow();
+  const from = opts.weekStart ?? new Date(now.getTime() - 7 * 86_400_000);
+  const to = opts.weekStart ? new Date(opts.weekStart.getTime() + 7 * 86_400_000) : new Date(now.getTime() + 42 * 86_400_000);
+  const rows = await db
+    .select({ slot: schema.slots, user: schema.users, post: schema.posts })
+    .from(schema.slots)
+    .innerJoin(schema.users, eq(schema.users.id, schema.slots.userId))
+    .leftJoin(schema.posts, eq(schema.posts.id, schema.slots.postId))
+    .where(and(scopeWhere(actor, schema.slots.userId), opts.userId ? eq(schema.slots.userId, opts.userId) : undefined, gt(schema.slots.publishAt, from), lt(schema.slots.publishAt, to)))
+    .orderBy(asc(schema.slots.publishAt));
+  const { isAtRisk } = await import("../schedule");
+  return rows.map((r) => ({
+    slotId: r.slot.id,
+    publishAt: r.slot.publishAt,
+    approvalDeadline: r.slot.approvalDeadline,
+    status: r.slot.status,
+    atRisk: isAtRisk(r.slot, now),
+    user: { id: r.user.id, displayName: r.user.displayName, timezone: r.user.timezone },
+    post: r.post ? { id: r.post.id, summary: r.post.summary, flagged: r.post.flaggedForStaff, suggestedTopic: r.post.suggestedTopic, staffApproved: !!r.post.staffApprovedBy } : null,
+  }));
+}

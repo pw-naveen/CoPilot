@@ -137,6 +137,15 @@ describe("inbound bundling", () => {
     expect(bundle.slotId).toBeTruthy();
   });
 
+  it("messages arriving at the same instant share one bundle", async () => {
+    const { user } = await readyForWhatsApp();
+    await verify(user.id);
+    await Promise.all(["one", "two", "three", "four"].map((t) => phone({ from: PHONE, text: `part ${t} of the story about our clinic` })));
+    const open = await db.query.inputBundles.findMany({ where: and(eq(schema.inputBundles.userId, user.id), isNull(schema.inputBundles.closedAt)) });
+    expect(open).toHaveLength(1);
+    expect(await db.query.waMessages.findMany({ where: eq(schema.waMessages.bundleId, open[0].id) })).toHaveLength(4);
+  });
+
   it('"done" closes the bundle without waiting', async () => {
     const { user } = await readyForWhatsApp();
     await verify(user.id);

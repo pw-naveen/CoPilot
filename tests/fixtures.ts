@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import * as mock from "@/server/ai/mock";
 import type { seedPeople } from "./helpers";
@@ -15,7 +16,7 @@ export async function makeFixtures(p: People) {
     samples: [],
     golden: [],
   });
-  const ids: Record<string, Record<T, string>> = { sample: {} as any, toneSample: {} as any, job: {} as any, slot: {} as any };
+  const ids: Record<string, Record<T, string>> = { sample: {} as any, toneSample: {} as any, job: {} as any, slot: {} as any, post: {} as any };
   for (const t of ["in", "out"] as T[]) {
     const u = users[t];
     await db.insert(schema.auditLog).values({ actorType: "system", actorId: "seed", userId: u.id, action: "seed", entity: "user", entityId: u.id });
@@ -29,6 +30,10 @@ export async function makeFixtures(p: People) {
     const publishAt = new Date(Date.now() + 10 * 86_400_000);
     const [sl] = await db.insert(schema.slots).values({ userId: u.id, publishAt, approvalDeadline: new Date(publishAt.getTime() - 48 * 3600_000) }).returning();
     ids.slot[t] = sl.id;
+    const [po] = await db.insert(schema.posts).values({ userId: u.id, status: "pending_approval", summary: "fixture" }).returning();
+    const [pv] = await db.insert(schema.postVersions).values({ postId: po.id, number: 1, text: "Fixture draft text.", createdBy: "ai" }).returning();
+    await db.update(schema.posts).set({ currentVersionId: pv.id }).where(eq(schema.posts.id, po.id));
+    ids.post[t] = po.id;
   }
   return {
     subId: p.sub.id,
@@ -39,6 +44,7 @@ export async function makeFixtures(p: People) {
     toneSample: (t: T) => ids.toneSample[t],
     job: (t: T) => ids.job[t],
     slot: (t: T) => ids.slot[t],
+    post: (t: T) => ids.post[t],
   };
 }
 

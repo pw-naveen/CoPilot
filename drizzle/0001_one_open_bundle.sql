@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "input_bundles_one_open" ON "input_bundles" USING btree ("user_id") WHERE closed_at is null;

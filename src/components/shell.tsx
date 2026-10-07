@@ -16,7 +16,6 @@ export const STAFF_NAV: NavItem[] = [
 ];
 
 export const USER_NAV: NavItem[] = [
-  { href: "/", label: "Home", icon: "house" },
   { href: "/calendar", label: "Calendar", icon: "calendar-check" },
   { href: "/persona", label: "Persona", icon: "user-circle" },
   { href: "/whatsapp", label: "WhatsApp", icon: "chat-circle-dots" },

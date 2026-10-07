@@ -194,13 +194,16 @@ export function answer(question: string, schedule: string) {
 }
 
 export function draft(a: { persona: Persona; input: string; images: DraftImage[]; issues?: string[] }) {
-  let text = compose(a.persona, a.input.split("\n")[0] || a.input, `Here's the part worth sharing: ${a.input.slice(0, 160).trim()}`);
+  const lines = a.input.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("(photo)"));
+  const lead = lines[0] ?? a.input;
+  const rest = lines.slice(1).join(" ").replace(/\(voice note\)\s*/g, "");
+  let text = compose(a.persona, lead, rest ? `What stayed with me: ${rest.slice(0, 220)}` : "What stayed with me was how much a small, well-run effort can do.");
   if (a.issues?.length) text = text.replace(/guarantee[sd]?|cure[sd]?/gi, "support");
   return {
     text,
     image_ids: a.images.filter((i) => i.consent || !/patient/i.test(i.description)).slice(0, 4).map((i) => i.id),
     first_comment: "",
-    summary: `A post about ${a.input.split(/[.\n]/)[0].slice(0, 60).trim()}`,
+    summary: `A post about ${lead.split(/[.,]/)[0].slice(0, 70).trim().replace(/^./, (c) => c.toLowerCase())}`,
   };
 }
 

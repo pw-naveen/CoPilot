@@ -55,7 +55,7 @@ export async function inviteUser(actor: AnyActor, input: z.infer<typeof inviteUs
 export const inviteStaffInput = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().toLowerCase().email(),
-  canInvite: z.boolean().default(false),
+  canInvite: z.boolean().optional(), // falls back to the global default
 });
 
 export async function inviteSubadmin(actor: AnyActor, input: z.infer<typeof inviteStaffInput>) {
@@ -66,7 +66,7 @@ export async function inviteSubadmin(actor: AnyActor, input: z.infer<typeof invi
   if (exists) throw conflict("That email is already in use");
   const [s] = await db
     .insert(schema.staff)
-    .values({ name: input.name, email: input.email, role: "subadmin", canInvite: input.canInvite })
+    .values({ name: input.name, email: input.email, role: "subadmin", canInvite: input.canInvite ?? (await getSetting("subadmin.can_invite_default")) === "true" })
     .returning();
   await audit(actor, { action: "staff.invite", entity: "staff", entityId: s.id, after: input });
   await sendInvite({ type: "staff", id: s.id, email: s.email, name: s.name }, actor.name);

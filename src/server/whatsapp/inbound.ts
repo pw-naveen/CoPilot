@@ -88,15 +88,10 @@ export async function ingest(msg: InboundMessage) {
   if (!user.whatsappVerifiedAt) return handleVerification(user, text);
   if (user.status === "paused") return;
 
-  // Attach to the open bundle (or start one), then debounce.
-  let bundle = await db.query.inputBundles.findFirst({
-    where: and(eq(schema.inputBundles.userId, user.id), isNull(schema.inputBundles.closedAt)),
-    orderBy: desc(schema.inputBundles.createdAt),
-  });
-  // Stamped with the scheduler clock so the debounce works under dev time travel too.
-  const at = await clockNow();
-  if (!bundle) [bundle] = await db.insert(schema.inputBundles).values({ userId: user.id, createdAt: at, updatedAt: at }).returning();
-  else await db.update(schema.inputBundles).set({ updatedAt: at }).where(eq(schema.inputBundles.id, bundle.id));
+  // Attach to the open bundle (or start one), then debounce. A partial unique index
+  // keeps it to one open bundle per user when messages arrive concurrently.
+  const at = await clockNow(); // scheduler clock, so the debounce works under dev time travel
+  const bundle = await openBundle(user.id, at);
   await db.update(schema.waMessages).set({ bundleId: bundle.id }).where(eq(schema.waMessages.id, row.id));
 
   const parts = await db.query.waMessages.findMany({ where: eq(schema.waMessages.bundleId, bundle.id) });
@@ -104,6 +99,21 @@ export async function ingest(msg: InboundMessage) {
   const quickApproval = parts.length === 1 && APPROVAL_WORDS.test(text) && !!(await latestPendingPost(user.id));
   if (DONE_WORDS.test(text) || quickApproval) return processNow(bundle.id);
   await scheduleBundle(bundle.id);
+}
+
+async function openBundle(userId: string, at: Date) {
+  const find = () =>
+    db.query.inputBundles.findFirst({ where: and(eq(schema.inputBundles.userId, userId), isNull(schema.inputBundles.closedAt)), orderBy: desc(schema.inputBundles.createdAt) });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const open = await find();
+    if (open) {
+      await db.update(schema.inputBundles).set({ updatedAt: at }).where(eq(schema.inputBundles.id, open.id));
+      return open;
+    }
+    const [created] = await db.insert(schema.inputBundles).values({ userId, createdAt: at, updatedAt: at }).onConflictDoNothing().returning();
+    if (created) return created;
+  }
+  throw new Error("could not open a bundle");
 }
 
 async function downloadVia(msg: InboundMessage) {

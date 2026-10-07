@@ -73,7 +73,7 @@ export function SubadminRow({ staff, users }: { staff: Staff; users: { id: strin
 
 export function InviteStaffForm() {
   const router = useRouter();
-  const [f, setF] = useState({ name: "", email: "", canInvite: false });
+  const [f, setF] = useState<{ name: string; email: string; canInvite?: boolean }>({ name: "", email: "" });
   const [msg, setMsg] = useState<{ tone: "info" | "alert"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   return (
@@ -86,7 +86,7 @@ export function InviteStaffForm() {
         try {
           await api("/api/admin/staff", { body: f });
           setMsg({ tone: "info", text: `Invite sent to ${f.email}.` });
-          setF({ name: "", email: "", canInvite: false });
+          setF({ name: "", email: "" });
           router.refresh();
         } catch (err) {
           setMsg({ tone: "alert", text: (err as Error).message });
@@ -103,7 +103,7 @@ export function InviteStaffForm() {
         <Input type="email" required value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
       </Field>
       <label className="flex items-center gap-2 text-[14px]">
-        <input type="checkbox" className="accent-[var(--red)]" checked={f.canInvite} onChange={(e) => setF({ ...f, canInvite: e.target.checked })} />
+        <input type="checkbox" className="accent-[var(--red)]" checked={!!f.canInvite} onChange={(e) => setF({ ...f, canInvite: e.target.checked })} />
         Allow them to invite users into their scope
       </label>
       <Button disabled={busy}>Send invite</Button>
