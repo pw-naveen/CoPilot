@@ -1,0 +1,55 @@
+# App, worker, Postgres and Redis. Evolution API runs separately (same host or not)
+# and is configured in Admin → Settings, or with the EVOLUTION_* variables.
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/persona
+      REDIS_URL: redis://redis:6379
+    ports: ["3000:3000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["npm", "run", "worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/persona
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+    restart: unless-stopped
+
+  migrate:
+    build: .
+    command: ["npm", "run", "db:migrate"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://app:app@postgres:5432/persona
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: persona
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d persona"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    volumes: [redisdata:/data]
+
+volumes:
+  pgdata:
+  redisdata:

@@ -4,6 +4,8 @@ import { devToolsEnabled } from "@/server/clock";
 import { optionalActor } from "@/server/page-auth";
 import { Logo } from "@/components/ui";
 
+export const dynamic = "force-dynamic";
+
 /** Development-only tools: mailbox, mock WhatsApp phone, time travel. */
 export default async function DevLayout({ children }: { children: React.ReactNode }) {
   if (!devToolsEnabled()) notFound();
