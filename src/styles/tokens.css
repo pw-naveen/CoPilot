@@ -1,0 +1,63 @@
+/*
+ * Design tokens — the one file to swap when the design system changes.
+ * Source: Pulseworks Design System (colours, effects, radii and type family copied
+ * verbatim from tokens/*.css). The deck system is drawn for a 1920×1080 canvas;
+ * the "app scale" block below maps its type ratios onto screen-sized UI.
+ */
+:root {
+  /* ── Pulseworks colour (verbatim) ── */
+  --surface: #ffffff;
+  --blush-50: #fcf3f4;
+  --blush-100: #fae5e6;
+  --blush-200: #f2c5c4;
+  --blush-300: #edb7b8;
+  --red: #eb1c24;
+  --red-text: #c21a1f;
+  --red-dark: #891619;
+  --on-red: #ffffff;
+  --ink: #0a0a0a;
+  --ink-soft: #3d3d3d;
+  --muted: #5e5e5e;
+  --graphite-300: #bdbdbd;
+  --graphite-500: #999999;
+  --graphite-700: #555555;
+  --line: #ebe3e3;
+
+  --gradient-pulse: linear-gradient(90deg, var(--red-dark), var(--red));
+  --wash-corner: radial-gradient(900px 620px at 100% 0%, var(--blush-200) 0%, var(--blush-100) 30%, rgba(255, 255, 255, 0) 70%);
+  --wash-bottom: radial-gradient(1100px 520px at 0% 100%, var(--blush-200) 0%, var(--blush-100) 38%, rgba(255, 255, 255, 0) 75%);
+
+  /* ── Pulseworks effects (verbatim) ── */
+  --radius-none: 0px;
+  --radius-md: 16px;
+  --radius-round: 50%;
+  --shadow-card: 0 12px 40px rgba(235, 28, 36, 0.08);
+  --shadow-disc: 0 8px 24px rgba(235, 28, 36, 0.28);
+
+  /* ── Pulseworks type family (verbatim) ── */
+  --font-sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* ── App scale (derived) ── */
+  --app-hero-size: 44px;   /* deck hero 88 ÷ 2 */
+  --app-title-size: 32px;  /* deck slide title 64 ÷ 2 */
+  --app-card-title-size: 15px;
+  --app-lead-size: 18px;
+  --app-body-size: 15px;
+  --app-eyebrow-size: 13px;
+  --app-caption-size: 12px;
+  --app-stat-size: 44px;
+  --app-rule-width: 64px;  /* deck 120×3 accent rule, scaled */
+  --app-rule-height: 3px;
+
+  /* ── Semantic aliases used by the app ── */
+  --bg: var(--surface);
+  --text-heading: var(--ink);
+  --text-body: var(--ink-soft);
+  --text-muted: var(--muted);
+  --accent: var(--red);
+  --accent-text: var(--red-text);
+  --accent-pressed: var(--red-dark);
+  --tint: var(--blush-50);
+  --tint-strong: var(--blush-100);
+  --hairline: var(--line);
+}
