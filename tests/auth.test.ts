@@ -6,6 +6,9 @@ import * as requestRoute from "@/app/api/auth/request/route";
 import * as otpRoute from "@/app/api/auth/otp/route";
 import * as magicRoute from "@/app/api/auth/magic/route";
 import * as usersRoute from "@/app/api/admin/users/route";
+import * as registerRoute from "@/app/api/auth/register/route";
+import * as loginRoute from "@/app/api/auth/login/route";
+import * as approvalRoute from "@/app/api/users/[userId]/approval/route";
 import { cookieFor } from "./helpers";
 import { NextRequest } from "next/server";
 
@@ -90,5 +93,99 @@ describe("staff 2FA", () => {
     expect((await call(usersRoute.GET, { cookie: fresh })).status).toBe(401);
     expect((await call(verifyRoute.POST, { cookie: fresh, body: { code: totpCodeFor(setup.json.secret) } })).status).toBe(200);
     expect((await call(usersRoute.GET, { cookie: fresh })).status).toBe(200);
+  });
+});
+
+describe("registration and approval", () => {
+  beforeEach(resetDb);
+
+  const NEW = { name: "Dr New", email: "new@test.dev", password: "a-long-enough-password", company: "Mediwira", phone: "+60127000111" };
+
+  it("creates a pending account that cannot sign in until an admin approves it", async () => {
+    await seedPeople();
+    expect((await call(registerRoute.POST, { body: NEW })).status).toBe(200);
+
+    const u = await db.query.users.findFirst({ where: eq(schema.users.email, NEW.email) });
+    expect(u?.status).toBe("pending");
+    expect(u?.org).toBe("Mediwira");
+    expect(u?.phoneE164).toBe("+60127000111");
+    expect(u?.passwordHash).toBeTruthy();
+    expect(u?.passwordHash).not.toContain(NEW.password); // stored hashed, never in the clear
+
+    // Correct password, but the account is not approved yet.
+    const blocked = await call(loginRoute.POST, { body: { email: NEW.email, password: NEW.password } });
+    expect(blocked.status).toBe(403);
+
+    const admin = await db.query.staff.findFirst({ where: eq(schema.staff.role, "admin") });
+    const approved = await call(approvalRoute.POST, {
+      cookie: await cookieFor("staff", admin!.id),
+      params: { userId: u!.id },
+      body: { decision: "approve" },
+    });
+    expect(approved.status).toBe(200);
+
+    const ok = await call(loginRoute.POST, { body: { email: NEW.email, password: NEW.password } });
+    expect(ok.status).toBe(200);
+    const after = await db.query.users.findFirst({ where: eq(schema.users.id, u!.id) });
+    expect(after?.status).toBe("onboarding");
+    expect(after?.approvedBy).toBe(admin!.id);
+  });
+
+  it("rejects a wrong password with the same message as an unknown email", async () => {
+    await seedPeople();
+    await call(registerRoute.POST, { body: NEW });
+    const u = await db.query.users.findFirst({ where: eq(schema.users.email, NEW.email) });
+    const admin = await db.query.staff.findFirst({ where: eq(schema.staff.role, "admin") });
+    await call(approvalRoute.POST, { cookie: await cookieFor("staff", admin!.id), params: { userId: u!.id }, body: { decision: "approve" } });
+
+    const wrong = await call(loginRoute.POST, { body: { email: NEW.email, password: "not-the-password" } });
+    const unknown = await call(loginRoute.POST, { body: { email: "nobody@test.dev", password: "not-the-password" } });
+    expect(wrong.status).toBe(401);
+    expect(unknown.status).toBe(401);
+    expect(wrong.json.error).toBe(unknown.json.error);
+  });
+
+  it("refuses a duplicate email or WhatsApp number", async () => {
+    await seedPeople();
+    await call(registerRoute.POST, { body: NEW });
+    expect((await call(registerRoute.POST, { body: NEW })).status).toBe(409);
+    expect((await call(registerRoute.POST, { body: { ...NEW, email: "other@test.dev" } })).status).toBe(409); // same phone
+    expect((await call(registerRoute.POST, { body: { ...NEW, email: "other@test.dev", phone: "+60127000222" } })).status).toBe(200);
+  });
+
+  it("stops password guessing after repeated wrong attempts", async () => {
+    await seedPeople();
+    await call(registerRoute.POST, { body: NEW });
+    const u = await db.query.users.findFirst({ where: eq(schema.users.email, NEW.email) });
+    const admin = await db.query.staff.findFirst({ where: eq(schema.staff.role, "admin") });
+    await call(approvalRoute.POST, { cookie: await cookieFor("staff", admin!.id), params: { userId: u!.id }, body: { decision: "approve" } });
+
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++)
+      codes.push((await call(loginRoute.POST, { body: { email: NEW.email, password: `wrong-${i}` } })).status);
+    expect(codes.filter((c) => c === 429).length).toBeGreaterThan(0);
+    // The correct password is refused too once the window is tripped.
+    expect((await call(loginRoute.POST, { body: { email: NEW.email, password: NEW.password } })).status).toBe(429);
+  });
+
+  it("will not let a sign-up shadow a staff email", async () => {
+    const { admin } = await seedPeople();
+    expect((await call(registerRoute.POST, { body: { ...NEW, email: admin.email } })).status).toBe(409);
+  });
+
+  it("keeps a rejected account out", async () => {
+    await seedPeople();
+    await call(registerRoute.POST, { body: NEW });
+    const u = await db.query.users.findFirst({ where: eq(schema.users.email, NEW.email) });
+    const admin = await db.query.staff.findFirst({ where: eq(schema.staff.role, "admin") });
+    await call(approvalRoute.POST, {
+      cookie: await cookieFor("staff", admin!.id),
+      params: { userId: u!.id },
+      body: { decision: "reject", reason: "Not a client" },
+    });
+    expect((await call(loginRoute.POST, { body: { email: NEW.email, password: NEW.password } })).status).toBe(403);
+    const after = await db.query.users.findFirst({ where: eq(schema.users.id, u!.id) });
+    expect(after?.status).toBe("rejected");
+    expect(after?.rejectedReason).toBe("Not a client");
   });
 });

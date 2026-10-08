@@ -6,3 +6,6 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 coverage
+
+# Redis writes a snapshot here if started with the repo as its working directory
+dump.rdb

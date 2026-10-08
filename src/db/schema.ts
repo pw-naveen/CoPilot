@@ -23,7 +23,7 @@ const timestamps = {
 };
 
 export const staffRole = pgEnum("staff_role", ["admin", "subadmin"]);
-export const userStatus = pgEnum("user_status", ["invited", "onboarding", "active", "paused"]);
+export const userStatus = pgEnum("user_status", ["pending", "rejected", "invited", "onboarding", "active", "paused"]);
 export const personaStatus = pgEnum("persona_status", ["draft", "active", "retired"]);
 export const postStatus = pgEnum("post_status", [
   "awaiting_input",
@@ -53,6 +53,7 @@ export const staff = pgTable("staff", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   role: staffRole("role").notNull(),
+  passwordHash: text("password_hash"),
   totpSecret: text("totp_secret"), // encrypted; null = 2FA off
   totpPending: text("totp_pending"), // encrypted secret awaiting confirmation
   canInvite: boolean("can_invite").notNull().default(false), // sub-admins only
@@ -62,6 +63,7 @@ export const staff = pgTable("staff", {
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
+  passwordHash: text("password_hash"),
   name: text("name").notNull(),
   displayName: text("display_name").notNull(),
   title: text("title"),
@@ -78,6 +80,9 @@ export const users = pgTable("users", {
   whatsappVerifiedAt: timestamp("whatsapp_verified_at", { withTimezone: true }),
   whatsappVerifyCode: text("whatsapp_verify_code"),
   invitedBy: uuid("invited_by"),
+  approvedBy: uuid("approved_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedReason: text("rejected_reason"),
   ...timestamps,
 });
 

@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 function key(): Buffer {
   const secret = process.env.APP_SECRET;
@@ -34,4 +34,37 @@ export function safeEqual(a: string, b: string): boolean {
   const x = Buffer.from(a);
   const y = Buffer.from(b);
   return x.length === y.length && timingSafeEqual(x, y);
+}
+
+// ── Passwords ─────────────────────────────────────────────────────────────
+
+/**
+ * scrypt with a per-password salt, stored as `scrypt$N$r$p$salt$hash`. Built on
+ * node:crypto so there is no native dependency to build on deploy. The cost
+ * parameters are the Node defaults scaled up; they live in the stored string so
+ * existing hashes keep verifying if the cost is raised later.
+ */
+const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 64 };
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16);
+  const hash = scryptSync(password.normalize("NFKC"), salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p });
+  return ["scrypt", SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString("base64"), hash.toString("base64")].join("$");
+}
+
+export function verifyPassword(password: string, stored: string | null | undefined): boolean {
+  if (!stored) return false;
+  const [scheme, n, r, p, salt, hash] = stored.split("$");
+  if (scheme !== "scrypt" || !salt || !hash) return false;
+  const expected = Buffer.from(hash, "base64");
+  try {
+    const actual = scryptSync(password.normalize("NFKC"), Buffer.from(salt, "base64"), expected.length, {
+      N: Number(n),
+      r: Number(r),
+      p: Number(p),
+    });
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
 }

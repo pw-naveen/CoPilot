@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Persona — Pulseworks",
+  title: "CoPilot — Pulseworks",
   description: "Posts written in your own voice, approved on WhatsApp.",
 };
 

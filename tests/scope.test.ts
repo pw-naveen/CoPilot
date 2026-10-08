@@ -33,6 +33,8 @@ export const SPECS: Spec[] = [
   { route: "auth/otp", method: "POST", kind: "public" },
   { route: "auth/totp", method: "POST", kind: "public" },
   { route: "auth/logout", method: "POST", kind: "public" },
+  { route: "auth/register", method: "POST", kind: "public" },
+  { route: "auth/login", method: "POST", kind: "public" },
   // self-service, act only on the caller
   { route: "me/totp", method: "POST", kind: "self", roles: ["admin", "sub"] },
   { route: "me/totp", method: "PUT", kind: "self", roles: ["admin", "sub"] },
@@ -42,6 +44,7 @@ export const SPECS: Spec[] = [
   { route: "admin/staff", method: "POST", kind: "admin-only", body: () => ({ name: "S", email: "s2@test.dev" }) },
   { route: "admin/staff/[staffId]", method: "PATCH", kind: "admin-only", params: (f) => ({ staffId: f.subId }), body: () => ({ canInvite: true }) },
   { route: "admin/staff/[staffId]/accounts", method: "PUT", kind: "admin-only", params: (f) => ({ staffId: f.subId }), body: (f) => ({ userIds: [f.user("in").id] }) },
+  { route: "users/[userId]/approval", method: "POST", kind: "admin-only", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ decision: "approve" }) },
   { route: "admin/settings", method: "GET", kind: "admin-only" },
   { route: "admin/settings", method: "PUT", kind: "admin-only", body: () => ({ "limits.monthly_cap": "20" }) },
   // staff, results filtered to scope (checked in the list tests below)

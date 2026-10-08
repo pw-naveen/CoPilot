@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { clock, extFor, useRecorder } from "@/components/recorder";
-import { Button, Card, Icon, Label, ProgressRing, Textarea, cx } from "@/components/ui";
+import { Button, Card, Icon, Label, Orb, ProgressRing, Textarea, cx } from "@/components/ui";
 import { ReviewOnly } from "./step-common";
 
 type Answer = { key: string; text: string; transcript: string | null; audio: string | null };
@@ -192,9 +192,7 @@ function Intro({ total, onStart }: { total: number; onStart: () => void }) {
   return (
     <Screen>
     <div className="mx-auto flex min-h-[100dvh] max-w-xl flex-col justify-center gap-6 px-4 py-16 text-center">
-      <span className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-red shadow-disc">
-        <Icon name="microphone" size={36} className="text-white" />
-      </span>
+      <Orb size={104} icon="microphone" className="mx-auto" />
       <h1 className="title title-hero">
         <span>Tell us</span>
         <span className="accent">how you think.</span>
@@ -355,19 +353,9 @@ function MicPanel({ rec, uploading, onType }: { rec: ReturnType<typeof useRecord
         disabled={uploading}
         onClick={recording ? rec.stop : rec.start}
         aria-label={recording ? "Stop recording" : "Start recording"}
-        className={cx(
-          "relative grid h-28 w-28 place-items-center rounded-full transition-transform active:scale-95 disabled:opacity-60",
-          recording ? "bg-red shadow-disc" : "bg-red shadow-disc hover:brightness-110",
-        )}
+        className="rounded-full transition-transform active:scale-95 disabled:opacity-60"
       >
-        {recording && (
-          <span
-            aria-hidden
-            className="absolute inset-0 rounded-full bg-red/30"
-            style={{ transform: `scale(${1 + rec.level * 0.6})`, transition: "transform 90ms linear" }}
-          />
-        )}
-        <Icon name={recording ? "stop" : "microphone"} size={44} className="relative text-white" />
+        <Orb size={132} level={recording ? rec.level : 0} icon={recording ? "stop" : "microphone"} />
       </button>
 
       <div className="text-center">
