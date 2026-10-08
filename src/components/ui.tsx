@@ -24,8 +24,18 @@ export function Icon({ name, size = 20, className, label }: { name: IconName; si
 }
 
 /** Supplied lockup, used as-is (never redrawn or recoloured). */
-export function Logo({ variant = "color", height = 28 }: { variant?: "color" | "reverse" | "white" | "mark"; height?: number }) {
-  const src = variant === "mark" ? "/brand/pulseworks-mark-color.png" : `/brand/pulseworks-lockup-${variant}.png`;
+/**
+ * The product runs on a dark ground, so `reverse` (white wordmark, gradient
+ * pulse) is the default per the brand guidance for ink grounds. `color` stays
+ * for the light surfaces — printed previews and emailed drafts.
+ */
+export function Logo({ variant = "reverse", height = 28 }: { variant?: "color" | "reverse" | "white" | "mark" | "mark-color"; height?: number }) {
+  const src =
+    variant === "mark"
+      ? "/brand/pulseworks-mark-white.png"
+      : variant === "mark-color"
+        ? "/brand/pulseworks-mark-color.png"
+        : `/brand/pulseworks-lockup-${variant}.png`;
   // eslint-disable-next-line @next/next/no-img-element
   return <img src={src} alt="Pulseworks" style={{ height, width: "auto" }} />;
 }
@@ -74,6 +84,13 @@ export function TwoToneTitle({
   );
 }
 
+/**
+ * Page header for a product surface. The deck's two-tone uppercase hero is a
+ * headline for an argument; a tool wants a label. The same `lead` + `accent`
+ * pair now sets one sentence-case line with the payoff in red, so every page
+ * keeps the brand's cadence at a size that doesn't shout at someone using it
+ * forty times a day.
+ */
 export function PageHeader({
   eyebrow,
   lead,
@@ -87,14 +104,22 @@ export function PageHeader({
   intro?: ReactNode;
   actions?: ReactNode;
 }) {
+  const join = (v?: string | string[]) => (Array.isArray(v) ? v.join(" ") : v);
   return (
-    <header className="mb-10 flex flex-wrap items-end justify-between gap-6">
-      <div className="flex max-w-3xl flex-col gap-4">
-        {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
-        <TwoToneTitle lead={lead} accent={accent} />
-        {intro && <p className="lead max-w-2xl">{intro}</p>}
+    <header className="mb-7 flex flex-wrap items-start justify-between gap-x-6 gap-y-4 border-b border-line pb-6">
+      <div className="flex min-w-0 max-w-3xl flex-col gap-1.5">
+        {eyebrow && (
+          <span className="flex items-center gap-2 text-[11px] font-semibold tracking-[0.1em] text-muted uppercase">
+            <span className="h-px w-5 bg-red" aria-hidden />
+            {eyebrow}
+          </span>
+        )}
+        <h1 className="text-[23px] leading-tight font-semibold tracking-[-0.02em] text-balance text-ink">
+          {join(lead)} {accent && <span className="text-red-text">{join(accent)}</span>}
+        </h1>
+        {intro && <p className="max-w-2xl text-[14px] leading-relaxed text-muted">{intro}</p>}
       </div>
-      {actions && <div className="flex gap-3">{actions}</div>}
+      {actions && <div className="flex flex-none gap-2">{actions}</div>}
     </header>
   );
 }
@@ -102,12 +127,18 @@ export function PageHeader({
 type BtnVariant = "primary" | "secondary" | "ghost" | "danger";
 const btn = (v: BtnVariant, size: "md" | "sm") =>
   cx(
-    "inline-flex items-center justify-center gap-2 rounded-[16px] font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none select-none",
-    size === "md" ? "h-11 px-5 text-[15px]" : "h-9 px-4 text-[13px]",
-    v === "primary" && "bg-red text-white hover:bg-red-dark active:bg-red-dark",
-    v === "secondary" && "bg-white text-ink shadow-card hover:text-red-text",
-    v === "ghost" && "text-red-text hover:text-red-dark hover:bg-blush-50",
-    v === "danger" && "bg-white text-red-text shadow-card hover:bg-blush-50",
+    "inline-flex items-center justify-center gap-2 rounded-[10px] font-semibold tracking-[-0.005em] select-none",
+    "transition-[background-color,border-color,color,box-shadow,transform] duration-150 ease-out active:translate-y-px",
+    "disabled:pointer-events-none disabled:opacity-40",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]",
+    size === "md" ? "h-10 px-4 text-[14px]" : "h-8 px-3 text-[13px]",
+    // A flat fill reads as a sticker; the inset highlight gives the accent a lit top edge.
+    v === "primary" &&
+      "bg-red text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_1px_2px_rgba(0,0,0,0.4)] hover:bg-[#f22a32] active:bg-red-dark",
+    v === "secondary" &&
+      "border border-line bg-surface-raised text-ink hover:border-line-strong hover:bg-[#232327]",
+    v === "ghost" && "text-ink-soft hover:bg-blush-50 hover:text-red-text",
+    v === "danger" && "border border-blush-200 bg-blush-50 text-red-text hover:bg-blush-100",
   );
 
 export function Button({
@@ -130,7 +161,7 @@ export function ButtonLink({
 
 export function Card({ className, children, ...p }: ComponentProps<"div">) {
   return (
-    <div {...p} className={cx("card p-6", className)}>
+    <div {...p} className={cx("card p-5", className)}>
       {children}
     </div>
   );
@@ -189,18 +220,22 @@ export function Field({
 }
 
 const inputCls =
-  "w-full rounded-[16px] bg-white px-4 text-[15px] text-ink placeholder:text-graphite-500 ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-red";
+  cx(
+    "w-full rounded-[10px] border border-line bg-surface-input px-3 text-[14px] text-ink",
+    "placeholder:text-graphite-700 transition-[border-color,box-shadow] duration-150",
+    "hover:border-line-strong focus:border-red/70 focus:outline-none focus:ring-[3px] focus:ring-red/20",
+  );
 
 export function Input(props: ComponentProps<"input">) {
-  return <input {...props} className={cx(inputCls, "h-11", props.className)} />;
+  return <input {...props} className={cx(inputCls, "h-10", props.className)} />;
 }
 
 export function Textarea(props: ComponentProps<"textarea">) {
-  return <textarea {...props} className={cx(inputCls, "min-h-28 py-3 leading-relaxed", props.className)} />;
+  return <textarea {...props} className={cx(inputCls, "min-h-28 py-2.5 leading-relaxed", props.className)} />;
 }
 
 export function Select(props: ComponentProps<"select">) {
-  return <select {...props} className={cx(inputCls, "h-11 appearance-none pr-10", props.className)} />;
+  return <select {...props} className={cx(inputCls, "h-10 appearance-none pr-9", props.className)} />;
 }
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -221,30 +256,37 @@ export const STATUS_LABEL: Record<string, string> = {
 
 /** Blush tints deepen as a post moves toward approval; red is reserved for the end states. */
 export function StatusPill({ status }: { status: string }) {
+  // Quiet states sit in tint, states needing attention gain an outline, and only
+  // a finished state earns the solid accent — so one glance ranks a list.
   const cls: Record<string, string> = {
-    pending: "bg-blush-200 text-ink",
-    rejected: "bg-white text-muted ring-1 ring-graphite-300",
-    awaiting_input: "bg-blush-50 text-muted",
-    drafting: "bg-blush-100 text-ink-soft",
-    pending_approval: "bg-blush-200 text-ink",
-    changes_requested: "bg-blush-200 text-ink",
-    approved: "bg-red text-white",
-    missed: "bg-white text-red-text ring-1 ring-red",
-    skipped: "bg-white text-muted ring-1 ring-graphite-300",
-    invited: "bg-blush-50 text-muted",
-    onboarding: "bg-blush-100 text-ink-soft",
-    active: "bg-red text-white",
-    paused: "bg-white text-muted ring-1 ring-graphite-300",
+    pending: "border-blush-300 bg-blush-100 text-red-text",
+    rejected: "border-line bg-surface-raised text-muted",
+    awaiting_input: "border-line bg-surface-raised text-muted",
+    drafting: "border-line-strong bg-surface-raised text-ink-soft",
+    pending_approval: "border-blush-300 bg-blush-100 text-red-text",
+    changes_requested: "border-blush-300 bg-blush-100 text-red-text",
+    approved: "border-transparent bg-red text-white",
+    missed: "border-red bg-blush-50 text-red-text",
+    skipped: "border-line bg-transparent text-graphite-700",
+    invited: "border-line bg-surface-raised text-muted",
+    onboarding: "border-line-strong bg-surface-raised text-ink-soft",
+    active: "border-transparent bg-red text-white",
+    paused: "border-line bg-transparent text-muted",
   };
   return (
-    <span className={cx("inline-flex h-6 items-center rounded-[16px] px-2.5 text-[12px] font-semibold whitespace-nowrap", cls[status])}>
+    <span
+      className={cx(
+        "inline-flex h-[22px] items-center rounded-full border px-2.5 text-[11px] font-semibold tracking-[0.01em] whitespace-nowrap",
+        cls[status],
+      )}
+    >
       {STATUS_LABEL[status] ?? status}
     </span>
   );
 }
 
 export function Label({ children }: { children: ReactNode }) {
-  return <span className="text-[12px] font-bold uppercase tracking-[0.02em] text-ink">{children}</span>;
+  return <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">{children}</span>;
 }
 
 export function EmptyState({ icon, title, children }: { icon: IconName; title: string; children?: ReactNode }) {
@@ -323,15 +365,14 @@ export function ProgressRing({
  * component reads as idle on a hero and as live while the mic is open.
  */
 export function Orb({ size = 96, level = 0, icon, className }: { size?: number; level?: number; icon?: IconName; className?: string }) {
+  const l = Math.min(1, Math.max(0, level));
   return (
     <span className={cx("relative grid flex-none place-items-center", className)} style={{ width: size, height: size }}>
+      <span className="orb-halo" aria-hidden />
       <span className="orb-ring" aria-hidden />
-      <span
-        className="orb grid h-full w-full place-items-center"
-        style={{ "--orb-level": Math.min(1, Math.max(0, level)) } as CSSProperties}
-        aria-hidden
-      >
-        {icon && <Icon name={icon} size={Math.round(size / 2.4)} className="relative text-white" />}
+      <span className="orb grid h-full w-full place-items-center" style={{ "--orb-level": l } as CSSProperties} aria-hidden>
+        <span className="orb-core" />
+        {icon && <Icon name={icon} size={Math.round(size / 2.8)} className="relative z-[1] text-white" />}
       </span>
     </span>
   );

@@ -7,7 +7,7 @@ export default async function RegisterPage() {
   const actor = await optionalActor();
   if (actor) redirect(actor.type === "staff" ? "/admin" : "/");
   return (
-    <main className="aurora flex min-h-[100dvh] flex-col">
+    <main className="wash flex min-h-[100dvh] flex-col">
       <div className="flex justify-center px-6 py-8 sm:justify-start sm:px-10">
         <Logo height={30} />
       </div>

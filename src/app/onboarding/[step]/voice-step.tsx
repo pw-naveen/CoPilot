@@ -155,7 +155,7 @@ function Flow(p: {
   return (
     <Screen>
     <div className="flex min-h-[100dvh] flex-col">
-      <header className="sticky top-0 z-10 bg-white/90 px-4 py-3 backdrop-blur sm:px-6">
+      <header className="sticky top-0 z-10 bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-6">
         <div className="mx-auto flex w-full max-w-xl items-center gap-4">
         {p.onBack ? (
           <button onClick={p.onBack} aria-label="Back" className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted hover:bg-blush-50 hover:text-red-text">

@@ -39,7 +39,7 @@ export function MockPhone({ users, initial }: { users: { name: string; phone: st
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
       <div className="flex flex-col gap-2">
         {users.map((u) => (
-          <button key={u.phone} onClick={() => setPhone(u.phone)} className={cx("flex items-center justify-between rounded-[16px] px-4 py-3 text-left", phone === u.phone ? "bg-white shadow-card" : "hover:bg-blush-50")}>
+          <button key={u.phone} onClick={() => setPhone(u.phone)} className={cx("flex items-center justify-between rounded-[16px] px-4 py-3 text-left", phone === u.phone ? "bg-surface-raised shadow-card" : "hover:bg-blush-50")}>
             <span>
               <span className="block text-[14px] font-semibold text-ink">{u.name}</span>
               <span className="text-[12px] text-muted">{u.phone}</span>
@@ -51,7 +51,7 @@ export function MockPhone({ users, initial }: { users: { name: string; phone: st
       </div>
 
       <div className="mx-auto flex h-[680px] w-full max-w-[420px] flex-col overflow-hidden rounded-[32px] border-[10px] border-ink bg-blush-50 shadow-card">
-        <div className="flex items-center gap-3 bg-white px-4 py-3">
+        <div className="flex items-center gap-3 bg-surface px-4 py-3">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-red">
             <Icon name="pulse" size={20} className="text-white" />
           </span>
@@ -64,7 +64,7 @@ export function MockPhone({ users, initial }: { users: { name: string; phone: st
           <Thread messages={messages} perspective="phone" />
         </div>
         <form
-          className="flex items-center gap-2 bg-white px-3 py-3"
+          className="flex items-center gap-2 bg-surface px-3 py-3"
           onSubmit={async (e) => {
             e.preventDefault();
             if (!text.trim()) return;

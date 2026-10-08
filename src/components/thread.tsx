@@ -28,7 +28,7 @@ export function Thread({ messages, perspective = "assistant" }: { messages: Thre
         const mine = perspective === "phone" ? m.direction === "in" : m.direction === "out";
         return (
           <div key={m.id} className={cx("flex", mine ? "justify-end" : "justify-start")}>
-            <div className={cx("max-w-[78%] rounded-[16px] px-4 py-2.5 text-[14px] leading-relaxed shadow-card", mine ? "bg-blush-100 text-ink" : "bg-white text-ink")}>
+            <div className={cx("max-w-[78%] rounded-[16px] px-4 py-2.5 text-[14px] leading-relaxed shadow-card", mine ? "bg-blush-100 text-ink" : "bg-surface-raised text-ink")}>
               {m.type === "image" && m.mediaUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={m.mediaUrl} alt="" className="mb-2 max-h-56 rounded-[12px] object-cover" />

@@ -13,7 +13,7 @@ export default async function DevLayout({ children }: { children: React.ReactNod
   if (!actor)
     return (
       <div className="wash min-h-screen">
-        <header className="flex h-16 items-center border-b border-line bg-white px-8"><Logo height={26} /></header>
+        <header className="flex h-16 items-center border-b border-line bg-surface px-8"><Logo height={26} /></header>
         <main className="mx-auto max-w-7xl px-4 py-10 sm:px-8">{children}</main>
       </div>
     );
