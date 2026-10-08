@@ -36,7 +36,7 @@ export function Calendar({ slots, tz, now, postHref }: { slots: CalSlot[]; tz: s
                 const day = start.plus({ days: i });
                 const items = list.filter((s) => DateTime.fromJSDate(s.publishAt, { zone: tz }).hasSame(day, "day"));
                 return (
-                  <div key={i} className={cx("min-h-24 rounded-[16px] p-2", items.length ? "bg-white shadow-card" : "hidden bg-blush-50/60 md:block")}>
+                  <div key={i} className={cx("min-h-24 rounded-[16px] p-2", items.length ? "bg-surface shadow-card" : "hidden bg-blush-50/60 md:block")}>
                     <p className={cx("mb-2 px-1 text-[12px] font-semibold", day.toISODate() === today ? "text-red-text" : "text-muted")}>
                       {day.toFormat("ccc d")}
                     </p>

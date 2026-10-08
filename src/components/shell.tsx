@@ -40,33 +40,32 @@ export function AppShell({ actor, nav, children, devTools }: { actor: Actor; nav
 
   return (
     <div className="wash min-h-[100dvh]">
-      {/* Desktop rail */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-28 flex-col items-stretch gap-6 px-3 py-5 md:flex">
-        <Link href={home} className="grid place-items-center py-2" aria-label="Home">
-          <Logo variant="mark" height={30} />
+      {/* Desktop rail: one continuous edge against the page, not a floating card. */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[88px] flex-col items-stretch gap-5 border-r border-line bg-[color-mix(in_srgb,var(--surface)_60%,transparent)] px-3 py-4 backdrop-blur-xl md:flex">
+        <Link href={home} className="grid h-9 place-items-center" aria-label="Home">
+          <Logo variant="mark" height={24} />
         </Link>
-        <div className="card flex-1 p-2">
-          <Rail items={items} />
-        </div>
+        <Rail items={items} />
       </aside>
 
-      <div className="md:pl-28">
-        <header className="sticky top-0 z-20 border-b border-line bg-white/90 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-8">
+      <div className="md:pl-[88px]">
+        <header className="sticky top-0 z-20 border-b border-line bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] backdrop-blur-xl">
+          <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-3 px-4 sm:px-7">
             <Link href={home} className="flex-none md:hidden" aria-label="Home">
-              <Logo height={24} />
+              <Logo height={22} />
             </Link>
+            <span className="hidden text-[13px] font-semibold tracking-[-0.01em] text-ink md:block">CoPilot</span>
             <div className="min-w-0 flex-1" />
             <div className="flex flex-none items-center gap-3">
-              <span className="hidden text-right text-[13px] leading-tight sm:block">
+              <span className="hidden text-right text-[12px] leading-tight sm:block">
                 <span className="block font-semibold text-ink">{actor.name}</span>
                 <span className="block text-muted">{role}</span>
               </span>
               <span
                 aria-hidden
-                className="grid h-9 w-9 place-items-center rounded-full bg-blush-100 text-[13px] font-bold text-red-text"
+                className="grid h-8 w-8 place-items-center rounded-full border border-blush-300 bg-blush-100 text-[12px] font-bold text-red-text"
               >
-                {initials(actor.name) || <Icon name="user" size={18} className="text-current" />}
+                {initials(actor.name) || <Icon name="user" size={16} className="text-current" />}
               </span>
               <LogoutButton />
             </div>
@@ -74,7 +73,7 @@ export function AppShell({ actor, nav, children, devTools }: { actor: Actor; nav
         </header>
 
         {/* Bottom padding clears the mobile tab bar. */}
-        <main className="mx-auto max-w-7xl px-4 pt-6 pb-28 sm:px-8 sm:pt-10 md:pb-14">{children}</main>
+        <main className="mx-auto max-w-[1320px] px-4 pt-7 pb-28 sm:px-7 sm:pt-9 md:pb-16">{children}</main>
       </div>
 
       <TabBar items={items} />

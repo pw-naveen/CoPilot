@@ -1,56 +1,97 @@
 /*
  * Design tokens — the one file to swap when the design system changes.
- * Source: Pulseworks Design System (colours, effects, radii and type family copied
- * verbatim from tokens/*.css). The deck system is drawn for a 1920×1080 canvas;
- * the "app scale" block below maps its type ratios onto screen-sized UI.
+ *
+ * Brand source: Pulseworks Design System. That system describes a pitch deck:
+ * a white canvas with blush washes, one red accent, Archivo, 16px cards and
+ * circles. A product UI is a different surface — denser, longer-lived, mostly
+ * read in a dark room — so the foundations carry over (Archivo, the red, the
+ * ink scale, circles as the secondary shape, warm red-tinted depth) while the
+ * ground inverts and the radius scale gains a smaller step for controls.
+ *
+ * Names are kept from the deck system so every consumer updates at once:
+ * `ink` is still the strongest text, `blush` still the accent tint, they are
+ * simply resolved for a dark ground.
  */
 :root {
-  /* ── Pulseworks colour (verbatim) ── */
-  --surface: #ffffff;
-  --blush-50: #fcf3f4;
-  --blush-100: #fae5e6;
-  --blush-200: #f2c5c4;
-  --blush-300: #edb7b8;
+  /* ── Brand constants (verbatim, never re-derived) ── */
   --red: #eb1c24;
-  --red-text: #c21a1f;
   --red-dark: #891619;
-  --on-red: #ffffff;
-  --ink: #0a0a0a;
-  --ink-soft: #3d3d3d;
-  --muted: #5e5e5e;
-  --graphite-300: #bdbdbd;
-  --graphite-500: #999999;
-  --graphite-700: #555555;
-  --line: #ebe3e3;
-
-  --gradient-pulse: linear-gradient(90deg, var(--red-dark), var(--red));
-  --wash-corner: radial-gradient(900px 620px at 100% 0%, var(--blush-200) 0%, var(--blush-100) 30%, rgba(255, 255, 255, 0) 70%);
-  --wash-bottom: radial-gradient(1100px 520px at 0% 100%, var(--blush-200) 0%, var(--blush-100) 38%, rgba(255, 255, 255, 0) 75%);
-
-  /* ── Pulseworks effects (verbatim) ── */
-  --radius-none: 0px;
-  --radius-md: 16px;
-  --radius-round: 50%;
-  --shadow-card: 0 12px 40px rgba(235, 28, 36, 0.08);
-  --shadow-disc: 0 8px 24px rgba(235, 28, 36, 0.28);
-
-  /* ── Pulseworks type family (verbatim) ── */
   --font-sans: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
 
-  /* ── App scale (derived) ── */
-  --app-hero-size: 44px;   /* deck hero 88 ÷ 2 */
-  --app-title-size: 32px;  /* deck slide title 64 ÷ 2 */
-  --app-card-title-size: 15px;
-  --app-lead-size: 18px;
-  --app-body-size: 15px;
-  --app-eyebrow-size: 13px;
-  --app-caption-size: 12px;
-  --app-stat-size: 44px;
-  --app-rule-width: 64px;  /* deck 120×3 accent rule, scaled */
-  --app-rule-height: 3px;
+  /* ── Ground ──
+     Warm near-black, so the red sits on it without the cyan cast a neutral
+     grey gives. Each step is a real surface, not a shade of the last. */
+  --bg: #0b0b0c;
+  --surface: #141416; /* cards */
+  --surface-raised: #1b1b1e; /* menus, popovers, hover */
+  --surface-sunken: #0e0e10; /* wells, inset tracks */
+  --surface-input: #0f0f11;
 
-  /* ── Semantic aliases used by the app ── */
-  --bg: var(--surface);
+  /* ── Ink ── */
+  --ink: #f4f4f5; /* headings */
+  --ink-soft: #cdcdd2; /* body */
+  --muted: #8d8d96; /* secondary, captions */
+  --graphite-700: #6a6a73;
+  --graphite-500: #52525a;
+  --graphite-300: #3a3a41;
+
+  /* ── Accent tints ──
+     The deck's blush is pale pink on white. The dark equivalent is the same
+     red at low alpha, so chips and fills keep their relationship to the accent
+     instead of becoming flat grey boxes. */
+  --blush-50: rgba(235, 28, 36, 0.07);
+  --blush-100: rgba(235, 28, 36, 0.13);
+  --blush-200: rgba(235, 28, 36, 0.22);
+  --blush-300: rgba(235, 28, 36, 0.32);
+
+  /* Red text on near-black needs to lift; #eb1c24 on #0b0b0c is under 4.5:1. */
+  --red-text: #ff6166;
+  --on-red: #ffffff;
+
+  /* ── Lines ──
+     Light at low alpha rather than a grey hex, so a line over a card and a
+     line over the page read as the same weight. */
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  /* ── Depth ──
+     On a dark ground a drop shadow does almost nothing; separation comes from
+     a hairline top highlight plus a deep ambient shadow. */
+  --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.42);
+  --shadow-raised: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 16px 48px rgba(0, 0, 0, 0.6);
+  --shadow-disc: 0 6px 24px rgba(235, 28, 36, 0.38), 0 0 0 1px rgba(235, 28, 36, 0.22);
+
+  /* ── Gradients ── */
+  --gradient-pulse: linear-gradient(90deg, var(--red-dark), var(--red));
+  /* Kept for the few light surfaces (print, email preview). */
+  --wash-corner: radial-gradient(900px 620px at 100% 0%, rgba(235, 28, 36, 0.14) 0%, rgba(235, 28, 36, 0.04) 36%, rgba(0, 0, 0, 0) 72%);
+  --wash-bottom: radial-gradient(1100px 520px at 0% 100%, rgba(235, 28, 36, 0.12) 0%, rgba(235, 28, 36, 0.03) 40%, rgba(0, 0, 0, 0) 76%);
+
+  /* ── Radii ──
+     The deck allows 0, 16 and 50%. 16px on a 36px-tall control reads as a
+     lozenge, which is most of why a dense UI built from deck radii looks
+     childish — so controls get their own smaller step. Cards keep 16. */
+  --radius-none: 0px;
+  --radius-sm: 10px; /* inputs, buttons, chips */
+  --radius-md: 16px; /* cards (brand) */
+  --radius-lg: 22px; /* full panels, sheets */
+  --radius-round: 50%;
+
+  /* ── Type ──
+     One family. Body drops to 14px: 15px is a marketing size, and a product
+     read all day wants the extra line on screen. Display tightens as it grows. */
+  --app-hero-size: 40px;
+  --app-title-size: 28px;
+  --app-card-title-size: 13px;
+  --app-lead-size: 17px;
+  --app-body-size: 14px;
+  --app-eyebrow-size: 12px;
+  --app-caption-size: 12px;
+  --app-stat-size: 40px;
+  --app-rule-width: 56px;
+  --app-rule-height: 2px;
+
+  /* ── Semantic aliases ── */
   --text-heading: var(--ink);
   --text-body: var(--ink-soft);
   --text-muted: var(--muted);
