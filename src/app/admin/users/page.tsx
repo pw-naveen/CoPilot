@@ -3,6 +3,7 @@ import { staffActor } from "@/server/page-auth";
 import { listUsers } from "@/server/services/accounts";
 import { Card, EmptyState, Icon, PageHeader, StatusPill } from "@/components/ui";
 import { InviteUserForm } from "./invite-form";
+import { PendingRegistrations } from "./pending-registrations";
 
 const STEP = ["", "Invite", "Profile", "Voice", "Persona", "Tone check", "Cadence", "WhatsApp"];
 
@@ -18,6 +19,20 @@ export default async function UsersPage() {
         accent="one place."
         intro={actor.role === "admin" ? "All accounts. Invite a new user to start their setup." : "The accounts assigned to you."}
       />
+      {actor.role === "admin" && (
+        <PendingRegistrations
+          pending={users
+            .filter((u) => u.status === "pending")
+            .map((u) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              org: u.org,
+              phoneE164: u.phoneE164,
+              createdAt: u.createdAt.toISOString(),
+            }))}
+        />
+      )}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="p-0">
           {users.length === 0 ? (
@@ -33,7 +48,7 @@ export default async function UsersPage() {
                       {u.displayName.replace(/^Dr\.?\s+/i, "").slice(0, 1)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block font-semibold text-ink">{u.displayName}</span>
+                      <span className="block truncate font-semibold text-ink">{u.displayName}</span>
                       <span className="block truncate text-[13px] text-muted">
                         {[u.title, u.org].filter(Boolean).join(" · ") || u.email}
                       </span>

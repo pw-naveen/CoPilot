@@ -107,3 +107,119 @@ body {
   .reveal { animation: reveal 0.35s ease-out both; }
   @keyframes reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Motion layer. Brand red stays the only hue; the movement comes from slow
+ * drifting gradients and a breathing glow rather than new colours. Everything
+ * here is CSS-driven (no JS per frame) and collapses to a static equivalent
+ * under prefers-reduced-motion.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/* Drifting multi-point gradient for hero and auth surfaces. */
+.aurora {
+  position: relative;
+  isolation: isolate;
+  background: var(--surface);
+  overflow: hidden;
+}
+.aurora::before,
+.aurora::after {
+  content: "";
+  position: absolute;
+  inset: -30%;
+  z-index: -1;
+  background:
+    radial-gradient(42% 46% at 22% 18%, rgba(235, 28, 36, 0.42) 0%, rgba(235, 28, 36, 0) 62%),
+    radial-gradient(38% 42% at 78% 26%, rgba(137, 22, 25, 0.34) 0%, rgba(137, 22, 25, 0) 60%),
+    radial-gradient(46% 50% at 60% 82%, rgba(242, 197, 196, 0.55) 0%, rgba(242, 197, 196, 0) 66%);
+  filter: blur(26px);
+  will-change: transform;
+  /* Strongest at the top, clearing toward the bottom so forms and body copy
+     sit on a clean surface rather than on top of the colour. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.55) 38%, rgba(0, 0, 0, 0.12) 66%, transparent 88%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.55) 38%, rgba(0, 0, 0, 0.12) 66%, transparent 88%);
+}
+.aurora::after {
+  background:
+    radial-gradient(34% 38% at 70% 12%, rgba(235, 28, 36, 0.3) 0%, rgba(235, 28, 36, 0) 58%),
+    radial-gradient(40% 44% at 18% 74%, rgba(237, 183, 184, 0.5) 0%, rgba(237, 183, 184, 0) 64%);
+  opacity: 0.85;
+}
+
+/* Same field, inverted for the immersive recording moment. */
+.aurora-dark {
+  background: #0a0a0a;
+  color: #fff;
+}
+.aurora-dark::before {
+  background:
+    radial-gradient(40% 44% at 26% 20%, rgba(235, 28, 36, 0.62) 0%, rgba(235, 28, 36, 0) 60%),
+    radial-gradient(36% 40% at 76% 30%, rgba(137, 22, 25, 0.55) 0%, rgba(137, 22, 25, 0) 58%),
+    radial-gradient(48% 52% at 56% 84%, rgba(194, 26, 31, 0.45) 0%, rgba(194, 26, 31, 0) 64%);
+}
+.aurora-dark::after {
+  background: radial-gradient(38% 42% at 68% 16%, rgba(235, 28, 36, 0.4) 0%, rgba(235, 28, 36, 0) 56%);
+}
+.aurora-dark::before,
+.aurora-dark::after {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+/* The assistant orb: a soft sphere that breathes, and reacts to mic level
+   through --orb-level (0–1) set inline while recording. */
+.orb {
+  position: relative;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.35) 18%, rgba(255, 255, 255, 0) 42%),
+    conic-gradient(from 210deg, var(--red) 0deg, var(--red-dark) 120deg, var(--red-text) 220deg, var(--red) 360deg);
+  box-shadow:
+    0 0 0 calc(6px + var(--orb-level, 0) * 14px) rgba(235, 28, 36, 0.14),
+    0 0 46px rgba(235, 28, 36, calc(0.4 + var(--orb-level, 0) * 0.45)),
+    inset 0 -8px 24px rgba(137, 22, 25, 0.55);
+  transform: scale(calc(1 + var(--orb-level, 0) * 0.07));
+  transition: transform 90ms linear, box-shadow 120ms linear;
+}
+.orb-ring {
+  position: absolute;
+  inset: -14%;
+  border-radius: 50%;
+  border: 1px solid rgba(235, 28, 36, 0.3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aurora::before { animation: drift-a 26s ease-in-out infinite alternate; }
+  .aurora::after { animation: drift-b 34s ease-in-out infinite alternate; }
+  .orb { animation: breathe 5.5s ease-in-out infinite; }
+  .orb-ring { animation: halo 3.6s ease-out infinite; }
+  .shimmer {
+    background: linear-gradient(100deg, var(--blush-50) 20%, var(--blush-100) 40%, var(--blush-50) 60%);
+    background-size: 220% 100%;
+    animation: shimmer 1.5s linear infinite;
+  }
+
+  @keyframes drift-a {
+    from { transform: translate3d(-4%, -2%, 0) scale(1); }
+    to   { transform: translate3d(5%, 4%, 0) scale(1.14); }
+  }
+  @keyframes drift-b {
+    from { transform: translate3d(4%, 3%, 0) scale(1.1); }
+    to   { transform: translate3d(-5%, -4%, 0) scale(1); }
+  }
+  @keyframes breathe {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.12); }
+  }
+  @keyframes halo {
+    0%   { transform: scale(0.94); opacity: 0.75; }
+    70%  { transform: scale(1.22); opacity: 0; }
+    100% { transform: scale(1.22); opacity: 0; }
+  }
+  @keyframes shimmer { to { background-position: -220% 0; } }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .rise { animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+}

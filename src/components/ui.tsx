@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import { ICON_PATHS, type IconName } from "./icon-paths";
 
 const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(" ");
@@ -152,24 +152,39 @@ export function IconCircle({ name, solid, size = 48 }: { name: IconName; solid?:
   );
 }
 
+/**
+ * Pass `htmlFor` when the field holds anything focusable besides the control
+ * itself (a show-password toggle, a unit button). An implicit label wraps those
+ * extras into the input's accessible name and steals their clicks, so the field
+ * renders as a plain div and associates the label explicitly instead.
+ */
 export function Field({
   label,
   hint,
   error,
+  htmlFor,
   children,
 }: {
   label: string;
   hint?: ReactNode;
   error?: string | null;
+  htmlFor?: string;
   children: ReactNode;
 }) {
+  const Wrapper = htmlFor ? "div" : "label";
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-semibold text-ink">{label}</span>
+    <Wrapper className="flex flex-col gap-1.5">
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className="text-[13px] font-semibold text-ink">
+          {label}
+        </label>
+      ) : (
+        <span className="text-[13px] font-semibold text-ink">{label}</span>
+      )}
       {children}
       {hint && !error && <span className="text-[12px] text-muted">{hint}</span>}
       {error && <span className="text-[12px] font-medium text-red-text">{error}</span>}
-    </label>
+    </Wrapper>
   );
 }
 
@@ -189,6 +204,8 @@ export function Select(props: ComponentProps<"select">) {
 }
 
 export const STATUS_LABEL: Record<string, string> = {
+  pending: "Awaiting approval",
+  rejected: "Not approved",
   awaiting_input: "Awaiting input",
   drafting: "Drafting",
   pending_approval: "Pending approval",
@@ -205,6 +222,8 @@ export const STATUS_LABEL: Record<string, string> = {
 /** Blush tints deepen as a post moves toward approval; red is reserved for the end states. */
 export function StatusPill({ status }: { status: string }) {
   const cls: Record<string, string> = {
+    pending: "bg-blush-200 text-ink",
+    rejected: "bg-white text-muted ring-1 ring-graphite-300",
     awaiting_input: "bg-blush-50 text-muted",
     drafting: "bg-blush-100 text-ink-soft",
     pending_approval: "bg-blush-200 text-ink",
@@ -295,6 +314,25 @@ export function ProgressRing({
         />
       </svg>
       <span className="absolute grid place-items-center text-[12px] font-bold text-ink tabular-nums">{children}</span>
+    </span>
+  );
+}
+
+/**
+ * The assistant orb. `level` (0–1) drives the glow and scale, so the same
+ * component reads as idle on a hero and as live while the mic is open.
+ */
+export function Orb({ size = 96, level = 0, icon, className }: { size?: number; level?: number; icon?: IconName; className?: string }) {
+  return (
+    <span className={cx("relative grid flex-none place-items-center", className)} style={{ width: size, height: size }}>
+      <span className="orb-ring" aria-hidden />
+      <span
+        className="orb grid h-full w-full place-items-center"
+        style={{ "--orb-level": Math.min(1, Math.max(0, level)) } as CSSProperties}
+        aria-hidden
+      >
+        {icon && <Icon name={icon} size={Math.round(size / 2.4)} className="relative text-white" />}
+      </span>
     </span>
   );
 }

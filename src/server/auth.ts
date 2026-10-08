@@ -1,11 +1,14 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
+import { z } from "zod";
 import * as OTPAuth from "otpauth";
 import { db, schema } from "@/db";
 import type { Actor } from "./actor";
-import { decrypt, encrypt, randomDigits, randomToken, sha256 } from "./crypto";
+import { decrypt, encrypt, hashPassword, randomDigits, randomToken, sha256, verifyPassword } from "./crypto";
 import { sendEmail } from "./email";
 import { appBaseUrl } from "./config";
-import { unauthorized } from "./errors";
+import { badRequest, conflict, forbidden, notFound, unauthorized } from "./errors";
+import type { AnyActor } from "./actor";
+import { toE164 } from "./whatsapp/gateway";
 
 export const SESSION_COOKIE = "sid";
 const SESSION_DAYS = 30;
@@ -159,7 +162,7 @@ export async function resolveSession(raw: string | undefined | null): Promise<Se
 
 function totp(secret: string, label: string) {
   return new OTPAuth.TOTP({
-    issuer: "Persona",
+    issuer: "CoPilot",
     label,
     algorithm: "SHA1",
     digits: 6,
@@ -203,3 +206,104 @@ export async function verifySessionTotp(rawCookie: string, code: string) {
 
 /** Test helper: generate the current TOTP code for a secret. */
 export const totpCodeFor = (secret: string) => totp(secret, "x").generate();
+
+// ── Registration and password sign-in ─────────────────────────────────────
+
+/**
+ * Self-service sign-up. The account is created in `pending` and cannot sign in
+ * until an admin approves it, so this endpoint never hands back a session.
+ */
+export const registerInput = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(10).max(200),
+  company: z.string().trim().min(1).max(120),
+  phone: z.string().trim().min(6).max(30),
+});
+
+export async function registerUser(input: z.infer<typeof registerInput>) {
+  const email = input.email.trim().toLowerCase();
+  const phone = toE164(input.phone);
+  if (phone.replace(/\D/g, "").length < 8) throw badRequest("Enter your WhatsApp number in international format, e.g. +60123456789");
+
+  // Staff emails are managed separately and must never be shadowed by a sign-up.
+  if (await db.query.staff.findFirst({ where: eq(schema.staff.email, email) }))
+    throw conflict("That email is already registered");
+  if (await db.query.users.findFirst({ where: eq(schema.users.email, email) }))
+    throw conflict("That email is already registered");
+  if (await db.query.users.findFirst({ where: eq(schema.users.phoneE164, phone) }))
+    throw conflict("That WhatsApp number is already registered");
+
+  const [u] = await db
+    .insert(schema.users)
+    .values({
+      email,
+      passwordHash: hashPassword(input.password),
+      name: input.name,
+      displayName: input.name,
+      org: input.company,
+      phoneE164: phone,
+      status: "pending",
+      onboardingStep: 1,
+    })
+    .returning();
+
+  // Tell the admins there is something to action; failure here must not lose the signup.
+  const admins = await db.query.staff.findMany({ where: eq(schema.staff.role, "admin") });
+  await Promise.all(
+    admins.map((a) =>
+      sendEmail(
+        a.email,
+        "New registration awaiting approval",
+        `${input.name} (${email}) from ${input.company} has registered and is waiting for approval.\n\nReview it here: ${appBaseUrl()}/admin/users`,
+      ).catch(() => {}),
+    ),
+  );
+  return u;
+}
+
+/** Email plus password, for both staff and users. */
+export async function loginWithPassword(email: string, password: string) {
+  const e = email.trim().toLowerCase();
+  const s = await db.query.staff.findFirst({ where: eq(schema.staff.email, e) });
+  if (s) {
+    if (!verifyPassword(password, s.passwordHash)) throw unauthorized("Wrong email or password");
+    return createSession("staff", s.id);
+  }
+  const u = await db.query.users.findFirst({ where: eq(schema.users.email, e) });
+  // Verify before branching on status so a wrong password can't reveal account state.
+  if (!u || !verifyPassword(password, u.passwordHash)) throw unauthorized("Wrong email or password");
+  if (u.status === "pending") throw forbidden("Your registration is still waiting for approval. We'll email you when it's ready.");
+  if (u.status === "rejected") throw forbidden("This account was not approved. Contact your administrator.");
+  if (u.status === "paused") throw forbidden("This account is paused. Contact your administrator.");
+  return createSession("user", u.id);
+}
+
+export async function approveRegistration(actor: AnyActor, userId: string) {
+  const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!u) throw notFound();
+  if (u.status !== "pending" && u.status !== "rejected") throw conflict("That registration has already been handled");
+  const [after] = await db
+    .update(schema.users)
+    .set({ status: "onboarding", onboardingStep: 2, approvedBy: actor.id, approvedAt: new Date(), rejectedReason: null })
+    .where(eq(schema.users.id, userId))
+    .returning();
+  await sendEmail(
+    u.email,
+    "Your account is approved",
+    `Hi ${u.name},\n\nYour account has been approved. Sign in to finish setting up your voice:\n${appBaseUrl()}/login`,
+  ).catch(() => {});
+  return after;
+}
+
+export async function rejectRegistration(actor: AnyActor, userId: string, reason: string) {
+  const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!u) throw notFound();
+  if (u.status !== "pending") throw conflict("That registration has already been handled");
+  const [after] = await db
+    .update(schema.users)
+    .set({ status: "rejected", rejectedReason: reason || null, approvedBy: actor.id, approvedAt: new Date() })
+    .where(eq(schema.users.id, userId))
+    .returning();
+  return after;
+}

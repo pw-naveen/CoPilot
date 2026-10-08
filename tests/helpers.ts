@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { createSession } from "@/server/auth";
+import { redis } from "@/server/queue";
 import { resetClockCache } from "@/server/clock";
 
 export async function resetDb() {
@@ -9,6 +10,10 @@ export async function resetDb() {
     .filter((t: any) => t && typeof t === "object" && Symbol.for("drizzle:Name") in t)
     .map((t: any) => `"${t[Symbol.for("drizzle:Name")]}"`);
   await db.execute(sql.raw(`TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE`));
+  // Rate-limit counters live in Redis, not Postgres, so truncating tables alone
+  // would carry one test's attempts into the next.
+  const keys = await redis().keys("rl:*");
+  if (keys.length) await redis().del(...keys);
   resetClockCache();
 }
 

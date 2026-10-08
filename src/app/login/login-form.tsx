@@ -1,38 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { Button, Eyebrow, Field, Input, Notice, TwoToneTitle } from "@/components/ui";
+import { Button, Field, Icon, Input, Notice, Orb } from "@/components/ui";
 
 export function LoginForm({ linkError }: { linkError?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(linkError ? "That link has expired or was already used. Request a new one." : null);
+  const [error, setError] = useState<string | null>(
+    linkError ? "That link has expired or was already used. Sign in with your password." : null,
+  );
 
-  async function request(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api("/api/auth/request", { body: { email } });
-      setSent(true);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verify(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const { next } = await api<{ next: string }>("/api/auth/otp", { body: { email, code } });
+      const { next } = await api<{ next: string }>("/api/auth/login", { body: { email, password } });
       router.replace(next);
       router.refresh();
     } catch (err) {
@@ -42,34 +31,62 @@ export function LoginForm({ linkError }: { linkError?: boolean }) {
   }
 
   return (
-    <div className="reveal flex w-full max-w-md flex-col gap-8">
-      <Eyebrow>Sign in</Eyebrow>
-      <TwoToneTitle lead={["Your voice,"]} accent={["on schedule."]} hero />
-      {error && <Notice tone="alert">{error}</Notice>}
-      {!sent ? (
-        <form onSubmit={request} className="flex flex-col gap-5">
-          <p className="lead">Enter your email. We'll send a sign-in link and a 6-digit code. No password needed.</p>
-          <Field label="Email">
-            <Input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-          </Field>
-          <Button disabled={busy || !email}>{busy ? "Sending…" : "Send sign-in link"}</Button>
-        </form>
-      ) : (
-        <form onSubmit={verify} className="flex flex-col gap-5">
-          <p className="lead">
-            If <strong className="font-semibold text-ink">{email}</strong> has an account, a link and code are on their way. Open the link, or type the code here.
-          </p>
-          <Field label="6-digit code">
-            <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} required autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
-          </Field>
-          <div className="flex gap-3">
-            <Button disabled={busy || code.length !== 6}>{busy ? "Checking…" : "Sign in"}</Button>
-            <Button type="button" variant="ghost" onClick={() => { setSent(false); setCode(""); }}>
-              Use a different email
-            </Button>
+    <div className="mx-auto w-full max-w-sm">
+      <div className="rise flex flex-col items-center gap-5 text-center">
+        <Orb size={88} icon="sparkle" />
+        <div>
+          <h1 className="text-[28px] leading-tight font-bold text-ink">Welcome back</h1>
+          <p className="mt-1.5 text-[15px] text-muted">Sign in to your CoPilot account.</p>
+        </div>
+      </div>
+
+      <form onSubmit={submit} className="rise mt-8 flex flex-col gap-4" style={{ animationDelay: "80ms" }}>
+        {error && <Notice tone="alert">{error}</Notice>}
+        <Field label="Email">
+          <Input
+            type="email"
+            required
+            autoFocus
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
+        </Field>
+        <Field label="Password" htmlFor="login-password">
+          <div className="relative">
+            <Input
+              id="login-password"
+              type={show ? "text" : "password"}
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Your password"
+              className="pr-11"
+            />
+            <button
+              type="button"
+              onClick={() => setShow(!show)}
+              aria-label={show ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted hover:text-red-text"
+            >
+              <Icon name={show ? "eye-slash" : "eye"} size={18} className="text-current" />
+            </button>
           </div>
-        </form>
-      )}
+        </Field>
+        <Button type="submit" disabled={busy || !email || !password} className="mt-1 w-full">
+          {busy ? "Signing in…" : "Sign in"}
+          {!busy && <Icon name="arrow-right" size={18} className="text-current" />}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-[14px] text-muted">
+        No account yet?{" "}
+        <Link href="/register" className="link">
+          Create one
+        </Link>
+      </p>
     </div>
   );
 }

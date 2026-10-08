@@ -22,10 +22,17 @@ export function persona(input: PersonaInput): Persona {
   const prefs = input.prefs;
   const p = input.profile;
   const name = p.display_name;
+  // A real model returns short pillar names. The mock only splits sentences, so
+  // trim each to a label-length phrase; otherwise a whole paragraph ends up as a
+  // pillar name, and the draft's hashtags are built from those names.
+  const label = (t: string) => {
+    const words = t.trim().split(/\s+/).slice(0, 5).join(" ").replace(/[.,;:]+$/, "");
+    return words.charAt(0).toUpperCase() + words.slice(1);
+  };
   const pillarsSrc = [...splitList(pick(a, "known_for")), ...splitList(pick(a, "causes"))].slice(0, 4);
   const pillars = (pillarsSrc.length ? pillarsSrc : ["Leadership in healthcare", "Patient-centred care", "Building teams"]).map((n) => ({
-    name: n.charAt(0).toUpperCase() + n.slice(1),
-    description: `Posts about ${n.toLowerCase()}, drawn from ${name}'s own work.`,
+    name: label(n),
+    description: `Posts about ${n.toLowerCase().slice(0, 140)}, drawn from ${name}'s own work.`,
   }));
   const formality = clamp(Number(prefs["pref.formality"] ?? 0.5));
   const personal = clamp(Number(prefs["pref.personal"] ?? 0.5));
