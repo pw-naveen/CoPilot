@@ -16,15 +16,21 @@ export type ThreadMsg = {
   sendAfter?: string | Date | null;
 };
 
-/** A WhatsApp conversation. "in" = from the user, "out" = from the assistant. */
-export function Thread({ messages, perspective = "assistant" }: { messages: ThreadMsg[]; perspective?: "assistant" | "phone" }) {
+/**
+ * A WhatsApp conversation. "in" = from the user, "out" = from the assistant.
+ *
+ * `perspective` says whose messages sit on the right. The account holder reading
+ * their own record expects what their phone shows, so that is the default; staff
+ * looking at someone else's thread read the assistant's side as "ours".
+ */
+export function Thread({ messages, perspective = "phone" }: { messages: ThreadMsg[]; perspective?: "assistant" | "phone" }) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => end.current?.scrollIntoView({ block: "end" }), [messages.length]);
   if (!messages.length) return <p className="py-16 text-center text-[14px] text-muted">No messages yet.</p>;
   return (
     <div className="flex flex-col gap-2">
       {messages.map((m) => {
-        // On the phone, the user's own messages sit on the right.
+        // On the phone, the account holder's own messages sit on the right.
         const mine = perspective === "phone" ? m.direction === "in" : m.direction === "out";
         return (
           <div key={m.id} className={cx("flex", mine ? "justify-end" : "justify-start")}>

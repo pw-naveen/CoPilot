@@ -8,6 +8,7 @@ import * as magicRoute from "@/app/api/auth/magic/route";
 import * as usersRoute from "@/app/api/admin/users/route";
 import * as registerRoute from "@/app/api/auth/register/route";
 import * as loginRoute from "@/app/api/auth/login/route";
+import * as waRoute from "@/app/api/auth/whatsapp/route";
 import * as approvalRoute from "@/app/api/users/[userId]/approval/route";
 import { cookieFor } from "./helpers";
 import { NextRequest } from "next/server";
@@ -187,5 +188,64 @@ describe("registration and approval", () => {
     const after = await db.query.users.findFirst({ where: eq(schema.users.id, u!.id) });
     expect(after?.status).toBe("rejected");
     expect(after?.rejectedReason).toBe("Not a client");
+  });
+});
+
+describe("WhatsApp verification at sign-up", () => {
+  beforeEach(resetDb);
+
+  const NEW2 = { name: "Dr Wa", email: "wa@test.dev", password: "a-long-enough-password", company: "Mediwira", phone: "+60127000999" };
+  const codeFor = async (email: string) => {
+    const u = (await db.query.users.findFirst({ where: eq(schema.users.email, email) }))!;
+    const msg = await db.query.waMessages.findFirst({
+      where: eq(schema.waMessages.userId, u.id),
+      orderBy: desc(schema.waMessages.createdAt),
+    });
+    return msg!.body!.match(/(\d{6})/)![1];
+  };
+
+  it("sends a code on sign-up and confirms the number", async () => {
+    await seedPeople();
+    expect((await call(registerRoute.POST, { body: NEW2 })).status).toBe(200);
+
+    const u = (await db.query.users.findFirst({ where: eq(schema.users.email, NEW2.email) }))!;
+    expect(u.whatsappVerifiedAt).toBeNull();
+    const code = await codeFor(NEW2.email);
+    expect(code).toMatch(/^\d{6}$/);
+
+    const ok = await call(waRoute.POST, { body: { email: NEW2.email, code } });
+    expect(ok.status).toBe(200);
+    const after = (await db.query.users.findFirst({ where: eq(schema.users.id, u.id) }))!;
+    expect(after.whatsappVerifiedAt).toBeTruthy();
+    // Verifying the number does not approve the account.
+    expect(after.status).toBe("pending");
+  });
+
+  it("rejects a wrong code and does not verify", async () => {
+    await seedPeople();
+    await call(registerRoute.POST, { body: NEW2 });
+    expect((await call(waRoute.POST, { body: { email: NEW2.email, code: "000000" } })).status).toBe(401);
+    const u = (await db.query.users.findFirst({ where: eq(schema.users.email, NEW2.email) }))!;
+    expect(u.whatsappVerifiedAt).toBeNull();
+  });
+
+  it("a code is single use", async () => {
+    await seedPeople();
+    await call(registerRoute.POST, { body: NEW2 });
+    const code = await codeFor(NEW2.email);
+    expect((await call(waRoute.POST, { body: { email: NEW2.email, code } })).status).toBe(200);
+    // Second attempt finds the account already verified rather than re-consuming.
+    const again = await call(waRoute.POST, { body: { email: NEW2.email, code } });
+    expect(again.json.alreadyVerified).toBe(true);
+  });
+
+  it("setup cannot be completed while the number is unverified", async () => {
+    const { inScope } = await seedPeople();
+    const { completeStep } = await import("@/server/services/onboarding");
+    const { saveCadence } = await import("@/server/services/cadence");
+    const { SYSTEM } = await import("@/server/actor");
+    await db.update(schema.users).set({ onboardingStep: 6, whatsappVerifiedAt: null }).where(eq(schema.users.id, inScope.id));
+    await saveCadence(SYSTEM, inScope.id, { postsPerWeek: 2, weekdays: [2, 4], times: ["09:00", "09:00"] });
+    await expect(completeStep(SYSTEM, inScope.id, 6)).rejects.toThrow();
   });
 });

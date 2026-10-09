@@ -14,9 +14,12 @@ import { activePersona } from "./persona";
 /**
  * Seven setup steps in a fixed order; progress is saved after every step.
  *   1 invite/login · 2 profile · 3 voice questionnaire · 4 persona review
- *   5 tone check · 6 cadence · 7 WhatsApp
+ *   5 tone check · 6 cadence
+ *
+ * WhatsApp is verified at sign-up, before an admin approves the account, so
+ * cadence is the last step and completing it makes the account live.
  */
-export const STEPS = ["", "invite", "profile", "voice", "persona", "tone", "cadence", "whatsapp"] as const;
+export const STEPS = ["", "invite", "profile", "voice", "persona", "tone", "cadence"] as const;
 export const MIN_ANSWERS = 6;
 export const MAX_SAMPLES = 10;
 
@@ -263,8 +266,23 @@ export async function completeStep(actor: AnyActor, userId: string, step: number
       throw conflict("Mark all three samples as “sounds like me” first");
   } else if (step === 6) {
     if (!(await db.query.cadences.findFirst({ where: eq(schema.cadences.userId, userId) }))) throw badRequest("Choose your posting cadence first");
+    if (!u.whatsappVerifiedAt) throw conflict("Your WhatsApp number isn't verified");
   } else {
-    throw conflict("This step completes automatically");
+    throw conflict("There is no such step");
+  }
+
+  // Cadence is the last step: finishing it makes the account live, starts the
+  // schedule and drafts the first post. The number was verified at sign-up.
+  if (step === 6) {
+    await db.update(schema.users).set({ status: "active", onboardingStep: 7 }).where(eq(schema.users.id, userId));
+    const { generateSlots } = await import("./cadence");
+    const { sendWelcome } = await import("../whatsapp/inbound");
+    const { kickoffFirstDraft } = await import("./posts");
+    await generateSlots(userId);
+    const firstSlot = await kickoffFirstDraft(userId).catch(() => null);
+    await sendWelcome(userId, { drafting: !!firstSlot }).catch(() => {});
+    await audit(actor, { action: "onboarding.complete", entity: "user", entityId: userId, userId, after: { status: "active", firstSlot } });
+    return { step: 7, jobId };
   }
 
   await db.update(schema.users).set({ onboardingStep: step + 1 }).where(eq(schema.users.id, userId));

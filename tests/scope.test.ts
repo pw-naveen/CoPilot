@@ -35,6 +35,7 @@ export const SPECS: Spec[] = [
   { route: "auth/logout", method: "POST", kind: "public" },
   { route: "auth/register", method: "POST", kind: "public" },
   { route: "auth/login", method: "POST", kind: "public" },
+  { route: "auth/whatsapp", method: "POST", kind: "public" },
   // self-service, act only on the caller
   { route: "me/totp", method: "POST", kind: "self", roles: ["admin", "sub"] },
   { route: "me/totp", method: "PUT", kind: "self", roles: ["admin", "sub"] },
@@ -87,8 +88,6 @@ export const SPECS: Spec[] = [
   { route: "admin/whatsapp", method: "GET", kind: "admin-only" },
   { route: "admin/whatsapp", method: "POST", kind: "admin-only", body: () => ({ action: "check" }) },
   { route: "webhooks/evolution", method: "POST", kind: "public" }, // shared-secret check, tested in whatsapp.test.ts
-  { route: "dev/phone", method: "GET", kind: "public" }, // DEV_TOOLS only
-  { route: "dev/phone", method: "POST", kind: "public" }, // DEV_TOOLS only
   // posts
   { route: "posts/[postId]", method: "GET", kind: "scoped", params: (f, t) => ({ postId: f.post(t) }) },
   { route: "posts/[postId]", method: "POST", kind: "scoped", params: (f, t) => ({ postId: f.post(t) }), body: () => ({ action: "edit", text: "Edited by scope test." }) },
@@ -221,7 +220,7 @@ describe("dev tools", () => {
   it("are unreachable when DEV_TOOLS is off", async () => {
     process.env.DEV_TOOLS = "0";
     try {
-      for (const r of ["dev/phone", "dev/clock"]) {
+      for (const r of ["dev/clock"]) {
         const mod = await load(r);
         expect((await call(mod.GET, { path: `/api/${r}?phone=%2B1` })).status).toBe(404);
         expect((await call(mod.POST, { body: { from: "+1", text: "x" } })).status).toBe(404);

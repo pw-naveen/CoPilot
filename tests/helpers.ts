@@ -72,3 +72,26 @@ export async function call(
   const json = await res.json().catch(() => null);
   return { status: res.status, json: json as any };
 }
+
+/**
+ * Simulate an inbound WhatsApp message through the real ingest path.
+ *
+ * This replaces the dev-only mock-phone route the tests used to post to: that
+ * route is gone, and driving the production code path is a better test anyway.
+ */
+export async function inbound(msg: { from: string; text?: string; caption?: string; media?: { data: Buffer; mime: string } }) {
+  const { ingest } = await import("@/server/whatsapp/inbound");
+  await ingest({
+    id: `test-${Math.random().toString(36).slice(2)}`,
+    from: msg.from,
+    // Derive the kind from the mime, as the gateway does: typing an image as
+    // audio sends it down the transcription path instead of vision.
+    type: !msg.media ? "text" : msg.media.mime.startsWith("image/") ? "image" : msg.media.mime.startsWith("audio/") ? "audio" : "document",
+    text: msg.text,
+    caption: msg.caption,
+    media: msg.media,
+    mime: msg.media?.mime,
+    raw: {},
+    at: new Date(),
+  });
+}

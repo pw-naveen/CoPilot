@@ -15,9 +15,7 @@ import { cachedStatus, setGateway } from "@/server/whatsapp";
 import { processDueBundles } from "@/server/whatsapp/inbound";
 import { sweepOutbox } from "@/server/whatsapp/outbox";
 import { redis } from "@/server/queue";
-import { call, cookieFor, resetDb, seedPeople } from "./helpers";
-import * as verifyRoute from "@/app/api/users/[userId]/whatsapp/verify/route";
-import * as phoneRoute from "@/app/api/dev/phone/route";
+import { call, cookieFor, inbound, resetDb, seedPeople } from "./helpers";
 import * as webhookRoute from "@/app/api/webhooks/evolution/route";
 
 const KL = "Asia/Kuala_Lumpur";
@@ -29,26 +27,43 @@ async function travel(ms: number) {
 async function travelTo(isoLocal: string) {
   await setOffsetMs(DateTime.fromISO(isoLocal, { zone: KL }).toMillis() - Date.now());
 }
-const phone = (body: object) => phoneRoute.POST(new NextRequest("http://x/api/dev/phone", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } }));
+const phone = (body: { from: string; text?: string; caption?: string; media?: { data: Buffer; mime: string } }) => inbound(body);
 const outbound = async (userId: string) =>
   db.query.waMessages.findMany({ where: and(eq(schema.waMessages.userId, userId), eq(schema.waMessages.direction, "out")), orderBy: (m, { asc }) => asc(m.createdAt) });
 const lastOut = async (userId: string) => (await outbound(userId)).at(-1);
 
 /** A user who has finished steps 2–6 and is waiting on WhatsApp verification. */
-async function readyForWhatsApp() {
+/**
+ * A user who finished setup. WhatsApp is verified during sign-up now, so by the
+ * time anyone exchanges messages the number is confirmed and the account live.
+ * Pass `verified: false` for the case where it is not.
+ */
+async function readyForWhatsApp({ verified = true }: { verified?: boolean } = {}) {
   const { inScope, admin } = await seedPeople();
   const persona = mockAi.persona({ profile: { display_name: "Dr In", languages: ["en"] }, answers: [], prefs: {}, samples: [], golden: [] });
-  await db.update(schema.users).set({ onboardingStep: 7, timezone: KL, displayName: "Dr Nanda" }).where(eq(schema.users.id, inScope.id));
+  await db
+    .update(schema.users)
+    .set({
+      onboardingStep: verified ? 7 : 6,
+      timezone: KL,
+      displayName: "Dr Nanda",
+      status: verified ? "active" : "onboarding",
+      whatsappVerifiedAt: verified ? new Date() : null,
+    })
+    .where(eq(schema.users.id, inScope.id));
   await db.insert(schema.personas).values({ userId: inScope.id, version: 1, json: persona, status: "active", createdBy: "system:test" });
   await saveCadence(SYSTEM, inScope.id, { postsPerWeek: 2, weekdays: [2, 4], times: ["09:00", "09:00"] });
   return { user: inScope, admin };
 }
 
+/**
+ * Bring an account to the state WhatsApp traffic assumes: number verified at
+ * sign-up and setup finished. Verification itself is covered in auth.test.ts.
+ */
 async function verify(userId: string) {
-  const cookie = await cookieFor("user", userId);
-  expect((await call(verifyRoute.POST, { cookie, params: { userId }, body: {} })).status).toBe(200);
-  const code = (await db.query.users.findFirst({ where: eq(schema.users.id, userId) }))!.whatsappVerifyCode!;
-  await phone({ from: PHONE, text: `YES ${code}` });
+  await db.update(schema.users).set({ whatsappVerifiedAt: new Date(), status: "active", onboardingStep: 7 }).where(eq(schema.users.id, userId));
+  const { generateSlots } = await import("@/server/services/cadence");
+  await generateSlots(userId);
 }
 
 beforeEach(async () => {
@@ -60,35 +75,57 @@ beforeEach(async () => {
   await travelTo("2026-10-05T10:00"); // Monday
 });
 
-describe("verification and welcome (MockGateway)", () => {
-  it("verifies the number, goes live, generates slots and sends the welcome", async () => {
-    const { user } = await readyForWhatsApp();
-    const cookie = await cookieFor("user", user.id);
-    const r = await call(verifyRoute.POST, { cookie, params: { userId: user.id }, body: {} });
-    expect(r.status).toBe(200);
-    const verifyMsg = await lastOut(user.id);
-    expect(verifyMsg?.status).toBe("sent");
-    expect(verifyMsg?.body).toMatch(/Reply YES \d{4}/);
+describe("going live and the welcome (MockGateway)", () => {
+  it("completing cadence activates the account, generates slots and sends the welcome", async () => {
+    // Verified at sign-up, everything done except the final step.
+    const { user } = await readyForWhatsApp({ verified: false });
+    await db.update(schema.users).set({ whatsappVerifiedAt: new Date(), onboardingStep: 6 }).where(eq(schema.users.id, user.id));
 
-    // a wrong reply gets a hint, not verification
-    await phone({ from: PHONE, text: "hello?" });
-    expect((await db.query.users.findFirst({ where: eq(schema.users.id, user.id) }))!.whatsappVerifiedAt).toBeNull();
+    const { completeStep } = await import("@/server/services/onboarding");
+    await completeStep(SYSTEM, user.id, 6);
 
-    const code = verifyMsg!.body!.match(/YES (\d{4})/)![1];
-    await phone({ from: PHONE, text: `yes ${code}` });
     const u = (await db.query.users.findFirst({ where: eq(schema.users.id, user.id) }))!;
     expect(u.status).toBe("active");
-    expect(u.whatsappVerifiedAt).toBeTruthy();
     expect((await db.query.slots.findMany({ where: eq(schema.slots.userId, user.id) })).length).toBeGreaterThan(8);
 
     const welcome = await lastOut(user.id);
     expect(welcome?.kind).toBe("welcome");
     expect(welcome?.body).toContain("Hi Dr Nanda, you're all set.");
-    // first slot Tue 13 Oct 9:00 → draft by Fri 9 Oct, approval by Sun 11 Oct
-    expect(welcome?.body).toContain("Tuesday 13 Oct, 9:00am");
-    expect(welcome?.body).toContain("Friday 9 Oct, 9:00am");
-    expect(welcome?.body).toContain("Sunday 11 Oct, 9:00am");
     expect(MockGateway.sent.at(-1)?.text).toBe(welcome?.body);
+  });
+
+  it("drafts the first post straight away and sends its preview link", async () => {
+    const { user } = await readyForWhatsApp({ verified: false });
+    await db.update(schema.users).set({ whatsappVerifiedAt: new Date(), onboardingStep: 6 }).where(eq(schema.users.id, user.id));
+
+    const { completeStep } = await import("@/server/services/onboarding");
+    await completeStep(SYSTEM, user.id, 6);
+
+    // The welcome promises a draft, so one has to actually be on its way.
+    const welcome = await lastOut(user.id);
+    expect(welcome?.body).toContain("writing your first draft now");
+
+    const out = await db.query.waMessages.findMany({
+      where: and(eq(schema.waMessages.userId, user.id), eq(schema.waMessages.direction, "out")),
+    });
+    const draft = out.find((m) => m.kind === "draft");
+    expect(draft?.body).toMatch(/\/p\/[\w-]+/);
+
+    const post = await db.query.posts.findFirst({ where: eq(schema.posts.userId, user.id) });
+    expect(post?.status).toBe("pending_approval");
+    expect(post?.suggestedTopic).toBe(true);
+
+    // The scheduler must not queue the same slot a second time.
+    const slot = (await db.query.slots.findFirst({ where: eq(schema.slots.id, post!.slotId!) }))!;
+    expect(slot.autoDraftAt).not.toBeNull();
+  });
+
+  it("refuses to finish setup when the number was never verified", async () => {
+    const { user } = await readyForWhatsApp({ verified: false });
+    await db.update(schema.users).set({ onboardingStep: 6, whatsappVerifiedAt: null }).where(eq(schema.users.id, user.id));
+    const { completeStep } = await import("@/server/services/onboarding");
+    await expect(completeStep(SYSTEM, user.id, 6)).rejects.toThrow();
+    expect((await db.query.users.findFirst({ where: eq(schema.users.id, user.id) }))!.status).toBe("onboarding");
   });
 
   it("ignores unknown numbers and logs them for admin", async () => {
@@ -101,11 +138,17 @@ describe("verification and welcome (MockGateway)", () => {
   });
 
   it("never messages users who haven't verified", async () => {
-    const { user } = await readyForWhatsApp();
+    const { user } = await readyForWhatsApp({ verified: false });
     const { queueMessage } = await import("@/server/whatsapp/outbox");
     await queueMessage({ userId: user.id, phone: PHONE, kind: "reply", text: "should not send" });
     expect(MockGateway.sent).toHaveLength(0);
     expect((await lastOut(user.id))?.status).toBe("failed");
+  });
+
+  it("does not start drafting for a message from an unverified number", async () => {
+    const { user } = await readyForWhatsApp({ verified: false });
+    await phone({ from: PHONE, text: "here is an idea" });
+    expect(await db.query.inputBundles.findFirst({ where: eq(schema.inputBundles.userId, user.id) })).toBeFalsy();
   });
 });
 
@@ -116,8 +159,8 @@ describe("inbound bundling", () => {
     const before = (await outbound(user.id)).length;
 
     await phone({ from: PHONE, text: "We ran a free heart screening day in Kampung Baru on Saturday" });
-    await phone({ from: PHONE, media: { base64: Buffer.from("fakeimage").toString("base64"), mime: "image/jpeg" }, caption: "the team" });
-    await phone({ from: PHONE, media: { base64: Buffer.alloc(3000).toString("base64"), mime: "audio/ogg" } });
+    await phone({ from: PHONE, media: { data: Buffer.from("fakeimage"), mime: "image/jpeg" }, caption: "the team" });
+    await phone({ from: PHONE, media: { data: Buffer.alloc(3000), mime: "audio/ogg" } });
     // nothing yet: waiting for silence
     expect((await outbound(user.id)).length).toBe(before);
     expect(await processDueBundles()).toBe(0);
@@ -281,12 +324,13 @@ describe("EvolutionGateway (swap with no other code changes)", () => {
 
   it("sends through the Evolution HTTP API", async () => {
     const { user } = await readyForWhatsApp();
-    const cookie = await cookieFor("user", user.id);
-    await call(verifyRoute.POST, { cookie, params: { userId: user.id }, body: {} });
+    const { queueMessage } = await import("@/server/whatsapp/outbox");
+    await queueMessage({ userId: user.id, phone: PHONE, kind: "reply", text: "Hello from CoPilot" });
+
     const send = hits.find((h) => h.url === "/message/sendText/mediwira");
     expect(send?.apikey).toBe("evo-key");
     expect(send?.body.number).toBe("60110000001");
-    expect(send?.body.text).toMatch(/Reply YES/);
+    expect(send?.body.text).toBe("Hello from CoPilot");
     expect((await lastOut(user.id))?.waMessageId).toMatch(/^EVO/);
   });
 
@@ -296,12 +340,9 @@ describe("EvolutionGateway (swap with no other code changes)", () => {
 
   it("ingests MESSAGES_UPSERT text and audio (downloaded via getBase64FromMediaMessage)", async () => {
     const { user } = await readyForWhatsApp();
-    const cookie = await cookieFor("user", user.id);
-    await call(verifyRoute.POST, { cookie, params: { userId: user.id }, body: {} });
-    const code = (await db.query.users.findFirst({ where: eq(schema.users.id, user.id) }))!.whatsappVerifyCode;
     const jid = "60110000001@s.whatsapp.net";
-    expect((await webhook({ event: "messages.upsert", instance: "mediwira", data: { key: { remoteJid: jid, fromMe: false, id: "W1" }, message: { conversation: `YES ${code}` }, messageTimestamp: 1791370000 } })).status).toBe(200);
-    expect((await db.query.users.findFirst({ where: eq(schema.users.id, user.id) }))!.status).toBe("active");
+    expect((await webhook({ event: "messages.upsert", instance: "mediwira", data: { key: { remoteJid: jid, fromMe: false, id: "W1" }, message: { conversation: "an idea for a post" }, messageTimestamp: 1791370000 } })).status).toBe(200);
+    expect((await db.query.waMessages.findFirst({ where: eq(schema.waMessages.waMessageId, "W1") }))?.body).toBe("an idea for a post");
 
     await webhook({ event: "messages.upsert", data: { key: { remoteJid: jid, fromMe: false, id: "W2" }, message: { audioMessage: { mimetype: "audio/ogg; codecs=opus", seconds: 4 } } } });
     const audio = await db.query.waMessages.findFirst({ where: eq(schema.waMessages.waMessageId, "W2") });

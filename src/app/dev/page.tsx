@@ -4,7 +4,6 @@ import type { IconName } from "@/components/icon-paths";
 
 const tools: { href: string; icon: IconName; title: string; text: string }[] = [
   { href: "/dev/mail", icon: "envelope-simple", title: "Mailbox", text: "Sign-in links, invites and fallback emails. Nothing is sent while SMTP is empty." },
-  { href: "/dev/phone", icon: "device-mobile", title: "Mock phone", text: "Chat as any user over the MockGateway: text, voice notes, photos." },
   { href: "/dev/clock", icon: "clock", title: "Time travel", text: "Move the scheduler clock forward and run its jobs immediately." },
 ];
 

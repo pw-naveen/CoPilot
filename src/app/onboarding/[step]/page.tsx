@@ -9,7 +9,6 @@ import { VoiceStep } from "./voice-step";
 import { PersonaStep } from "./persona-step";
 import { ToneStep } from "./tone-step";
 import { CadenceStep } from "./cadence-step";
-import { WhatsAppStep } from "./whatsapp-step";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +25,18 @@ export default async function StepPage({ params }: { params: Promise<{ step: str
   // Step 3 runs its own shell: it drives the orb from live mic level and swaps
   // its footer per stage, which the generic frame cannot express.
   const Frame = step === 3 ? Fragment : FlowShell;
-  const frameProps = step === 3 ? {} : { current: step, reached, name: s.user.displayName, reviewOnly: !editable };
+  // Persona, tone and cadence lay their content out side by side; the single
+  // column that suits a form would stack those into a very long scroll.
+  const frameProps =
+    step === 3
+      ? {}
+      : {
+          current: step,
+          reached,
+          name: s.user.displayName,
+          reviewOnly: !editable,
+          width: step >= 4 ? ("wide" as const) : ("narrow" as const),
+        };
 
   return (
     <Frame {...frameProps}>
@@ -55,7 +65,6 @@ export default async function StepPage({ params }: { params: Promise<{ step: str
         />
       )}
       {step === 6 && <CadenceStep userId={actor.id} editable={editable} timezone={s.user.timezone} cadence={s.cadence ? { postsPerWeek: s.cadence.postsPerWeek, weekdays: s.cadence.weekdays, times: s.cadence.times } : null} />}
-      {step === 7 && <WhatsAppStep userId={actor.id} phone={s.user.phoneE164} verified={!!s.user.whatsappVerifiedAt} />}
     </Frame>
   );
 }

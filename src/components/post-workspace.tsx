@@ -89,7 +89,7 @@ export function PostWorkspace({ view: initial, apiBase, mode, isAdmin = false }:
   const fmt = (iso: string, f = "cccc d LLL, h:mma") => DateTime.fromISO(iso, { zone: tz }).toFormat(f).replace("AM", "am").replace("PM", "pm");
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+    <div className="grid grid-cols-1 items-start gap-8 pb-24 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-0">
       <div className="flex flex-col gap-6">
         {view.post.flaggedForStaff && (
           <Statement>
@@ -245,8 +245,10 @@ export function PostWorkspace({ view: initial, apiBase, mode, isAdmin = false }:
           )}
           {status === "missed" && <Notice tone="alert">The approval deadline passed. Move it to a later slot to use it.</Notice>}
 
+          {/* On a phone the approval bar is pinned to the bottom instead, so this
+              stack would be a second copy of it right under the draft. */}
           {open && !view.post.flaggedForStaff && (
-            <div className="flex flex-col gap-2">
+            <div className={cx("flex-col gap-2", pastDeadline ? "flex" : "hidden lg:flex")}>
               {!pastDeadline && (
                 <Button disabled={busy} onClick={() => act({ action: "approve" }, "Approved.")}>
                   <Icon name="check" size={18} className="text-white" />
@@ -316,6 +318,26 @@ export function PostWorkspace({ view: initial, apiBase, mode, isAdmin = false }:
           </ul>
         </Card>
       </aside>
+
+      {/* Phone: the decision travels with the reader. Without this the two
+          buttons sit below the whole draft and the version list, so approving
+          means scrolling past everything you just read. */}
+      {open && !view.post.flaggedForStaff && !pastDeadline && !panel && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] px-4 py-3 backdrop-blur-xl lg:hidden"
+          style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        >
+          <div className="mx-auto flex max-w-md gap-2">
+            <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => setPanel("changes")}>
+              Request changes
+            </Button>
+            <Button className="flex-1" disabled={busy} onClick={() => act({ action: "approve" }, "Approved.")}>
+              <Icon name="check" size={18} className="text-white" />
+              Approve
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

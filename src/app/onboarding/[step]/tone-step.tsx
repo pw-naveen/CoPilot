@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, waitForJob } from "@/lib/api";
 import { LinkedInPreview } from "@/components/linkedin-preview";
 import { Button, Card, Icon, IconCircle, Label, Notice, PageHeader, Textarea, cx } from "@/components/ui";
-import { ReviewOnly } from "./step-common";
+import { ContinueBar, ReviewOnly } from "./step-common";
 import { Working } from "@/components/working";
 
 type Sample = { id: string; kind: string; text: string; verdict: string | null; comment: string | null; rounds: number; updatedAt: string };
@@ -51,12 +51,25 @@ export function ToneStep(p: { userId: string; editable: boolean; kinds: { kind: 
           <p className="mb-6 text-[14px] font-semibold text-ink">
             {approved} of {p.kinds.length} sound like you
           </p>
-          <div className="grid gap-8 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             {p.kinds.map((k) => {
               const s = p.samples.find((x) => x.kind === k.kind)!;
               return <SampleCard key={k.kind} userId={p.userId} sample={s} editable={p.editable} displayName={p.displayName} headline={p.title} />;
             })}
           </div>
+          {p.editable && (
+            <ContinueBar
+              userId={p.userId}
+              step={5}
+              label="Set my posting rhythm"
+              disabled={approved < p.kinds.length}
+              hint={
+                approved < p.kinds.length
+                  ? `Mark all ${p.kinds.length} as “sounds like me” to continue. Anything you mark close or off is rewritten first.`
+                  : undefined
+              }
+            />
+          )}
         </>
       )}
     </>

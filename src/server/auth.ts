@@ -248,6 +248,10 @@ export async function registerUser(input: z.infer<typeof registerInput>) {
     })
     .returning();
 
+  // Send the WhatsApp code immediately: the number is verified before an admin
+  // ever sees the request, so nobody approves an account that cannot be reached.
+  await sendWhatsappCode(u.id).catch(() => {});
+
   // Tell the admins there is something to action; failure here must not lose the signup.
   const admins = await db.query.staff.findMany({ where: eq(schema.staff.role, "admin") });
   await Promise.all(
@@ -306,4 +310,63 @@ export async function rejectRegistration(actor: AnyActor, userId: string, reason
     .where(eq(schema.users.id, userId))
     .returning();
   return after;
+}
+
+
+// ── WhatsApp verification, at sign-up ─────────────────────────────────────
+
+const WA_CODE_MINUTES = 15;
+
+/**
+ * Issues a 6-digit code and sends it over WhatsApp.
+ *
+ * Reuses `login_tokens` rather than columns on `users`: that table already has
+ * expiry, single use and an attempt counter, which is exactly what an OTP
+ * needs and what a bare `whatsapp_verify_code` column had none of.
+ */
+export async function sendWhatsappCode(userId: string) {
+  const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!u) throw notFound();
+  if (u.whatsappVerifiedAt) throw conflict("That number is already verified");
+
+  const code = randomDigits(6);
+  await db.insert(schema.loginTokens).values({
+    actorType: "user",
+    actorId: u.id,
+    tokenHash: sha256(`wa:${randomToken()}`), // unused for this flow, but the column is unique and not null
+    otpHash: sha256(`wa:${u.id}:${code}`),
+    expiresAt: new Date(Date.now() + WA_CODE_MINUTES * 60_000),
+  });
+
+  const { queueMessage } = await import("./whatsapp/outbox");
+  await queueMessage({
+    userId: u.id,
+    phone: u.phoneE164,
+    kind: "verify",
+    text: `${code} is your CoPilot verification code. It expires in ${WA_CODE_MINUTES} minutes.`,
+  });
+  return { phone: u.phoneE164 };
+}
+
+/** Confirms the number. The account stays `pending` — an admin still approves it. */
+export async function verifyWhatsappCode(email: string, code: string) {
+  const e = email.trim().toLowerCase();
+  const u = await db.query.users.findFirst({ where: eq(schema.users.email, e) });
+  if (!u) throw unauthorized("Invalid code");
+  if (u.whatsappVerifiedAt) return { alreadyVerified: true };
+
+  const rows = await db.query.loginTokens.findMany({
+    where: and(eq(schema.loginTokens.actorId, u.id), isNull(schema.loginTokens.usedAt), gt(schema.loginTokens.expiresAt, new Date())),
+    orderBy: (t, { desc }) => desc(t.createdAt),
+    limit: 3,
+  });
+  const hash = sha256(`wa:${u.id}:${code.trim()}`);
+  const match = rows.find((r) => r.otpHash === hash && r.attempts < MAX_OTP_ATTEMPTS);
+  if (!match) {
+    for (const r of rows) await db.update(schema.loginTokens).set({ attempts: r.attempts + 1 }).where(eq(schema.loginTokens.id, r.id));
+    throw unauthorized("That code is wrong or has expired");
+  }
+  await db.update(schema.loginTokens).set({ usedAt: new Date() }).where(eq(schema.loginTokens.id, match.id));
+  await db.update(schema.users).set({ whatsappVerifiedAt: new Date(), whatsappVerifyCode: null }).where(eq(schema.users.id, u.id));
+  return { alreadyVerified: false };
 }

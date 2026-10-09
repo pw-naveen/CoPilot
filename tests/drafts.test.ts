@@ -14,8 +14,7 @@ import { setGateway } from "@/server/whatsapp";
 import { MockGateway } from "@/server/whatsapp/mock";
 import { sweepOutbox } from "@/server/whatsapp/outbox";
 import { redis } from "@/server/queue";
-import { call, cookieFor, resetDb, seedPeople } from "./helpers";
-import * as phoneRoute from "@/app/api/dev/phone/route";
+import { call, cookieFor, inbound, resetDb, seedPeople } from "./helpers";
 import * as previewRoute from "@/app/api/preview/[token]/route";
 import * as postRoute from "@/app/api/posts/[postId]/route";
 
@@ -23,9 +22,7 @@ const KL = "Asia/Kuala_Lumpur";
 const PHONE = "+60110000001";
 
 const travelTo = (iso: string) => setOffsetMs(DateTime.fromISO(iso, { zone: KL }).toMillis() - Date.now());
-const phone = async (text: string) => {
-  await phoneRoute.POST(new NextRequest("http://x/api/dev/phone", { method: "POST", body: JSON.stringify({ from: PHONE, text }), headers: { "content-type": "application/json" } }));
-};
+const phone = (text: string) => inbound({ from: PHONE, text });
 const say = async (text: string) => {
   await phone(text);
   await phone("done");
