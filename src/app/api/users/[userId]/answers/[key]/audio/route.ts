@@ -1,6 +1,6 @@
 import { badRequest } from "@/server/errors";
 import { route } from "@/server/http";
-import { clearAudioAnswer, saveAudioAnswer } from "@/server/services/onboarding";
+import { clearAudioAnswer, retryTranscription, saveAudioAnswer } from "@/server/services/onboarding";
 import { assertUserAccess } from "@/server/scope";
 
 /** Multipart upload of a recorded answer (field `audio`). Returns a job to poll for the transcript. */
@@ -16,4 +16,9 @@ export const POST = route<{ userId: string; key: string }>(async ({ req, actor, 
 export const DELETE = route<{ userId: string; key: string }>(async ({ actor, params }) => {
   await clearAudioAnswer(actor, params.userId, params.key);
   return { ok: true };
+});
+
+/** Re-queue transcription for a recording that is already stored. */
+export const PUT = route<{ userId: string; key: string }>(async ({ actor, params }) => {
+  return { jobId: await retryTranscription(actor, params.userId, params.key) };
 });

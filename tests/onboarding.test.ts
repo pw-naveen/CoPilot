@@ -8,6 +8,7 @@ import * as stepRoute from "@/app/api/users/[userId]/onboarding/step/route";
 import * as profileRoute from "@/app/api/users/[userId]/profile/route";
 import * as answerRoute from "@/app/api/users/[userId]/answers/[key]/route";
 import * as audioRoute from "@/app/api/users/[userId]/answers/[key]/audio/route";
+import * as statesRoute from "@/app/api/users/[userId]/answers/route";
 import * as samplesRoute from "@/app/api/users/[userId]/samples/route";
 import * as personaRoute from "@/app/api/users/[userId]/persona/route";
 import * as regenRoute from "@/app/api/users/[userId]/persona/generate/route";
@@ -128,5 +129,82 @@ describe("onboarding steps 2–5", () => {
 
   it("covers every questionnaire key", () => {
     expect(QUESTIONS).toHaveLength(12);
+  });
+});
+
+describe("transcription failures are visible", () => {
+  beforeEach(resetDb);
+
+  const recordAnswer = async (userId: string, cookie: string, key: string) => {
+    const form = new FormData();
+    form.set("audio", new File([new Uint8Array(2048)], "a.webm", { type: "audio/webm" }));
+    return call(audioRoute.POST, { cookie, params: { userId, key }, form });
+  };
+
+  it("reports a failed transcription instead of claiming it is still running", async () => {
+    const { inScope } = await seedPeople();
+    const cookie = await cookieFor("user", inScope.id);
+    await recordAnswer(inScope.id, cookie, "proud_moment");
+
+    // The mock transcriber succeeds, so force the failure the UI has to survive.
+    await db
+      .update(schema.onboardingAnswers)
+      .set({ transcript: null })
+      .where(eq(schema.onboardingAnswers.questionKey, "proud_moment"));
+    await db
+      .update(schema.jobs)
+      .set({ status: "failed", error: "The assistant couldn't finish that. Please try again.", errorDetail: "401 invalid_api_key" })
+      .where(eq(schema.jobs.kind, "transcribe_answer"));
+
+    const res = await call(statesRoute.GET, { cookie, params: { userId: inScope.id } });
+    const answer = res.json.answers.find((a: { key: string }) => a.key === "proud_moment");
+    expect(answer.status).toBe("failed");
+    expect(answer.error).toBeTruthy();
+    // DEV_TOOLS is on in tests, so the real cause is served.
+    expect(answer.detail).toContain("invalid_api_key");
+  });
+
+  it("never serves the real cause once dev tools are off", async () => {
+    const { inScope } = await seedPeople();
+    const cookie = await cookieFor("user", inScope.id);
+    await recordAnswer(inScope.id, cookie, "proud_moment");
+    await db.update(schema.onboardingAnswers).set({ transcript: null }).where(eq(schema.onboardingAnswers.questionKey, "proud_moment"));
+    await db
+      .update(schema.jobs)
+      .set({ status: "failed", error: "The assistant couldn't finish that. Please try again.", errorDetail: "sk-live-abcdef leaked here" })
+      .where(eq(schema.jobs.kind, "transcribe_answer"));
+
+    const prev = process.env.DEV_TOOLS;
+    process.env.DEV_TOOLS = "0";
+    try {
+      const res = await call(statesRoute.GET, { cookie, params: { userId: inScope.id } });
+      const answer = res.json.answers.find((a: { key: string }) => a.key === "proud_moment");
+      expect(answer.status).toBe("failed");
+      expect(answer.error).toBeTruthy(); // still told something went wrong
+      expect(answer.detail).toBeNull(); // but never the detail
+      expect(JSON.stringify(res.json)).not.toContain("sk-live");
+    } finally {
+      process.env.DEV_TOOLS = prev;
+    }
+  });
+
+  it("retrying re-queues the stored recording", async () => {
+    const { inScope } = await seedPeople();
+    const cookie = await cookieFor("user", inScope.id);
+    await recordAnswer(inScope.id, cookie, "proud_moment");
+    await db.update(schema.onboardingAnswers).set({ transcript: null }).where(eq(schema.onboardingAnswers.questionKey, "proud_moment"));
+
+    const res = await call(audioRoute.PUT, { cookie, params: { userId: inScope.id, key: "proud_moment" } });
+    expect(res.status).toBe(200);
+    // JOBS_INLINE runs it immediately in tests, so the transcript comes back.
+    const a = await db.query.onboardingAnswers.findFirst({ where: eq(schema.onboardingAnswers.questionKey, "proud_moment") });
+    expect(a?.transcript?.length ?? 0).toBeGreaterThan(20);
+  });
+
+  it("refuses to retry when there is no recording", async () => {
+    const { inScope } = await seedPeople();
+    const cookie = await cookieFor("user", inScope.id);
+    const res = await call(audioRoute.PUT, { cookie, params: { userId: inScope.id, key: "proud_moment" } });
+    expect(res.status).toBe(400);
   });
 });

@@ -25,7 +25,27 @@ export async function runJob(id: string) {
     await db.update(schema.jobs).set({ status: "done", result: result ?? null }).where(eq(schema.jobs.id, id));
   } catch (err) {
     console.error(`[job ${job.kind}]`, err);
-    await db.update(schema.jobs).set({ status: "failed", error: "The assistant couldn't finish that. Please try again." }).where(eq(schema.jobs.id, id));
+    // Two messages: one safe to put in front of anyone, and the real one. The
+    // detail is always recorded — a failure you cannot diagnose after the fact
+    // is the expensive kind — but it is only served when DEV_TOOLS is on.
+    const e = err as { message?: string; status?: number; code?: string; stack?: string };
+    const detail = [
+      e?.message ?? String(err),
+      e?.status ? `status ${e.status}` : null,
+      e?.code ? `code ${e.code}` : null,
+      e?.stack?.split("\n").slice(1, 4).join("\n") || null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    await db
+      .update(schema.jobs)
+      .set({
+        status: "failed",
+        error: "The assistant couldn't finish that. Please try again.",
+        errorDetail: detail.slice(0, 4000),
+        attempts: (job.attempts ?? 0) + 1,
+      })
+      .where(eq(schema.jobs.id, id));
     if (process.env.JOBS_INLINE !== "1") throw err;
   }
 }

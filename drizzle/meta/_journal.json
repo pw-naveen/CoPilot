@@ -22,6 +22,13 @@
       "when": 1791469647733,
       "tag": "0002_auth_passwords_and_approval",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791524941438,
+      "tag": "0003_job_error_detail",
+      "breakpoints": true
     }
   ]
 }
