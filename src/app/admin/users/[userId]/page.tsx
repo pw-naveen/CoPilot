@@ -17,7 +17,7 @@ import { AccountSettings } from "./account-settings";
 
 export const dynamic = "force-dynamic";
 
-const STEP = ["", "Invite", "Profile", "Voice", "Persona", "Tone check", "Cadence", "WhatsApp"];
+const STEP = ["", "Invite", "Profile", "Voice", "Persona", "Tone check", "Cadence", "Done"];
 
 export default async function UserDetail({ params }: { params: Promise<{ userId: string }> }) {
   const actor = await staffActor();
@@ -28,7 +28,7 @@ export default async function UserDetail({ params }: { params: Promise<{ userId:
 
   return (
     <>
-      <PageHeader eyebrow={[u.title, u.org].filter(Boolean).join(" · ") || "Account"} lead={u.displayName} accent={u.status === "active" ? "is live." : u.status === "paused" ? "is paused." : "is setting up."} />
+      <PageHeader eyebrow={[u.title, u.org].filter(Boolean).join(" · ") || "Account"} lead={u.displayName} accent={u.status === "active" ? "is live." : u.status === "paused" ? "is suspended." : "is setting up."} />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
@@ -42,12 +42,20 @@ export default async function UserDetail({ params }: { params: Promise<{ userId:
             <dt className="text-muted">Time zone</dt>
             <dd>{u.timezone}</dd>
             <dt className="text-muted">Setup</dt>
-            <dd>{u.status === "active" || u.status === "paused" ? "Complete" : `Step ${u.onboardingStep - 1} of 6 · ${STEP[u.onboardingStep]}`}</dd>
+            <dd>{u.status === "active" || u.status === "paused" ? "Complete" : `Step ${u.onboardingStep - 1} of 5 · ${STEP[u.onboardingStep]}`}</dd>
             <dt className="text-muted">Audit</dt>
             <dd><Link className="link" href={`/admin/audit?userId=${u.id}`}>View history</Link></dd>
           </dl>
         </Card>
-        <AccountSettings userId={u.id} staffApprovalIsFinal={u.staffApprovalIsFinal} status={u.status} canInvite={actor.role === "admin" || actor.canInvite} />
+        <AccountSettings
+          userId={u.id}
+          email={u.email}
+          displayName={u.displayName}
+          staffApprovalIsFinal={u.staffApprovalIsFinal}
+          status={u.status}
+          canInvite={actor.role === "admin" || actor.canInvite}
+          isAdmin={actor.role === "admin"}
+        />
       </div>
 
       <section className="mt-14">

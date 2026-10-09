@@ -217,9 +217,12 @@ export const registerInput = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(10).max(200),
-  company: z.string().trim().min(1).max(120),
+  // One of the two: an organization the admin set up, or a typed company name
+  // for anyone whose employer is not on the list yet.
+  organizationId: z.string().uuid().optional(),
+  company: z.string().trim().max(120).optional().default(""),
   phone: z.string().trim().min(6).max(30),
-});
+}).refine((v) => !!v.organizationId || !!v.company.trim(), { message: "Choose your organisation", path: ["company"] });
 
 export async function registerUser(input: z.infer<typeof registerInput>) {
   const email = input.email.trim().toLowerCase();
@@ -234,6 +237,17 @@ export async function registerUser(input: z.infer<typeof registerInput>) {
   if (await db.query.users.findFirst({ where: eq(schema.users.phoneE164, phone) }))
     throw conflict("That WhatsApp number is already registered");
 
+  // A chosen organization has to exist and still be open to sign-ups; its name
+  // is copied onto the account so drafts and the persona read the same either
+  // way, whether or not the organization is still linked later.
+  let org: { id: string; name: string } | null = null;
+  if (input.organizationId) {
+    const found = await db.query.organizations.findFirst({ where: eq(schema.organizations.id, input.organizationId) });
+    if (!found || !found.active) throw badRequest("Choose your organisation from the list");
+    org = { id: found.id, name: found.name };
+  }
+  const company = org?.name ?? input.company.trim();
+
   const [u] = await db
     .insert(schema.users)
     .values({
@@ -241,7 +255,8 @@ export async function registerUser(input: z.infer<typeof registerInput>) {
       passwordHash: hashPassword(input.password),
       name: input.name,
       displayName: input.name,
-      org: input.company,
+      organizationId: org?.id ?? null,
+      org: company,
       phoneE164: phone,
       status: "pending",
       onboardingStep: 1,
@@ -259,7 +274,7 @@ export async function registerUser(input: z.infer<typeof registerInput>) {
       sendEmail(
         a.email,
         "New registration awaiting approval",
-        `${input.name} (${email}) from ${input.company} has registered and is waiting for approval.\n\nReview it here: ${appBaseUrl()}/admin/users`,
+        `${input.name} (${email}) from ${company} has registered and is waiting for approval.\n\nReview it here: ${appBaseUrl()}/admin/users`,
       ).catch(() => {}),
     ),
   );
@@ -279,7 +294,7 @@ export async function loginWithPassword(email: string, password: string) {
   if (!u || !verifyPassword(password, u.passwordHash)) throw unauthorized("Wrong email or password");
   if (u.status === "pending") throw forbidden("Your registration is still waiting for approval. We'll email you when it's ready.");
   if (u.status === "rejected") throw forbidden("This account was not approved. Contact your administrator.");
-  if (u.status === "paused") throw forbidden("This account is paused. Contact your administrator.");
+  if (u.status === "paused") throw forbidden("This account is suspended. Contact your administrator.");
   return createSession("user", u.id);
 }
 

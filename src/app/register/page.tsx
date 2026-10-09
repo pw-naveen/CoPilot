@@ -2,11 +2,15 @@ import { redirect } from "next/navigation";
 import { optionalActor } from "@/server/page-auth";
 import { Logo } from "@/components/ui";
 import { AmbientOrb } from "@/components/ambient-orb";
+import { selectableOrganizations } from "@/server/services/organizations";
 import { RegisterForm } from "./register-form";
+
+export const dynamic = "force-dynamic";
 
 export default async function RegisterPage() {
   const actor = await optionalActor();
   if (actor) redirect(actor.type === "staff" ? "/admin" : "/");
+  const organizations = await selectableOrganizations();
   return (
     <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[var(--bg)]">
       <AmbientOrb />
@@ -14,7 +18,7 @@ export default async function RegisterPage() {
         <Logo height={40} />
       </div>
       <div className="relative z-10 flex flex-1 items-center justify-center px-6 py-10">
-        <RegisterForm />
+        <RegisterForm organizations={organizations} />
       </div>
     </main>
   );

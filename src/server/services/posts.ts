@@ -135,12 +135,14 @@ export async function generateDraftForSlot(slotId: string, opts: { suggestedTopi
   const p = await goldenFor(user.id, persona);
   const recent = await recentPostTexts(user.id);
   const slotDate = slot.publishAt.toISOString();
+  const { organizationContext } = await import("./organizations");
+  const orgContext = await organizationContext(user.id);
 
-  let draft = await ai.generateDraft(user.id, { persona: p, input: input.text, recent, slotDate, images });
-  let review = await ai.reviewDraft(user.id, { persona: p, input: input.text, text: draft.data.text, images });
+  let draft = await ai.generateDraft(user.id, { persona: p, input: input.text, recent, slotDate, images, orgContext });
+  let review = await ai.reviewDraft(user.id, { persona: p, input: input.text, text: draft.data.text, images, orgContext });
   if (!review.data.pass) {
-    draft = await ai.generateDraft(user.id, { persona: p, input: input.text, recent, slotDate, images, issues: review.data.issues });
-    review = await ai.reviewDraft(user.id, { persona: p, input: input.text, text: draft.data.text, images });
+    draft = await ai.generateDraft(user.id, { persona: p, input: input.text, recent, slotDate, images, issues: review.data.issues, orgContext });
+    review = await ai.reviewDraft(user.id, { persona: p, input: input.text, text: draft.data.text, images, orgContext });
   }
   const flagged = !review.data.pass;
   const mediaIds = draft.data.image_ids.filter((id) => images.some((i) => i.id === id)).slice(0, 4);
@@ -262,14 +264,16 @@ export async function reviseDraft({ postId, feedback, by, audioKey }: { postId: 
   await setStatus(post, "drafting");
   const { row: personaRow, persona } = await requireActivePersona(post.userId);
   const v = (await currentVersion(post))!;
-  let rev = await ai.reviseDraft(post.userId, { persona, text: v.text, feedback });
+  const { organizationContext } = await import("./organizations");
+  const orgContext = await organizationContext(post.userId);
+  let rev = await ai.reviseDraft(post.userId, { persona, text: v.text, feedback, orgContext });
   const imgs = v.media.length ? await db.query.media.findMany({ where: inArray(schema.media.id, v.media) }) : [];
   const images = imgs.map((m) => ({ id: m.id, description: m.visionDescription ?? "image", consent: m.consentFlag }));
   const input = post.bundleId ? (await bundleInput(post.bundleId)).text : post.topic ?? "";
-  let review = await ai.reviewDraft(post.userId, { persona, input, text: rev.data.text, images });
+  let review = await ai.reviewDraft(post.userId, { persona, input, text: rev.data.text, images, orgContext });
   if (!review.data.pass) {
-    rev = await ai.reviseDraft(post.userId, { persona, text: v.text, feedback: `${feedback}\n\nAlso fix: ${review.data.issues.join("; ")}` });
-    review = await ai.reviewDraft(post.userId, { persona, input, text: rev.data.text, images });
+    rev = await ai.reviseDraft(post.userId, { persona, text: v.text, feedback: `${feedback}\n\nAlso fix: ${review.data.issues.join("; ")}`, orgContext });
+    review = await ai.reviewDraft(post.userId, { persona, input, text: rev.data.text, images, orgContext });
   }
   const flagged = !review.data.pass;
   const [nv] = await db

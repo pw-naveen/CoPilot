@@ -54,7 +54,20 @@ export const SPECS: Spec[] = [
   // per-account
   { route: "admin/users/[userId]", method: "GET", kind: "scoped", roles: ["admin", "sub"], params: (f, t) => ({ userId: f.user(t).id }) },
   { route: "admin/users/[userId]", method: "PATCH", kind: "scoped", roles: ["admin", "sub"], params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ staffApprovalIsFinal: false }) },
+  // Suspend: sub-admins may, so it is scoped. A fixture account is mid-setup,
+  // so an allowed caller gets 409 — enough to prove the boundary without
+  // changing state the other specs rely on.
+  { route: "admin/users/[userId]", method: "POST", kind: "scoped", roles: ["admin", "sub"], params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ suspend: true }) },
+  // Delete is admin-only. The confirmation deliberately does not match, so an
+  // allowed caller gets 400 rather than erasing the fixtures mid-suite.
+  { route: "admin/users/[userId]", method: "DELETE", kind: "admin-only", params: (f, t) => ({ userId: f.user(t).id }), body: () => ({ confirmEmail: "not-the-right-email@test.dev" }) },
   { route: "admin/users/[userId]/reinvite", method: "POST", kind: "scoped", roles: ["admin", "sub"], params: (f, t) => ({ userId: f.user(t).id }) },
+  // organizations
+  { route: "organizations", method: "GET", kind: "public" },
+  { route: "admin/organizations", method: "GET", kind: "admin-only" },
+  { route: "admin/organizations", method: "POST", kind: "admin-only", body: () => ({ name: `Org ${Date.now()}` }) },
+  { route: "admin/organizations/[orgId]", method: "PATCH", kind: "admin-only", params: (f) => ({ orgId: f.orgId }), body: () => ({ context: "No client names." }) },
+  { route: "admin/organizations/[orgId]", method: "DELETE", kind: "admin-only", params: (f) => ({ orgId: f.orgDeletableId }) },
   { route: "admin/audit", method: "GET", kind: "scoped", roles: ["admin", "sub"], query: (f, t) => `?userId=${f.user(t).id}` },
   // per-account setup (user acts on themselves; staff on their scope)
   { route: "files/[...key]", method: "GET", kind: "public" }, // HMAC-signed URLs only

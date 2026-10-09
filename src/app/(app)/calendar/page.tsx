@@ -49,7 +49,7 @@ export default async function CalendarPage() {
 
       {u.status === "paused" && (
         <div className="mb-6">
-          <Notice tone="alert">Your account is paused. No reminders or drafts are being sent.</Notice>
+          <Notice tone="alert">Your account is suspended. No reminders or drafts are being sent.</Notice>
         </div>
       )}
 

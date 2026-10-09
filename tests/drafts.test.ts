@@ -65,7 +65,7 @@ describe("drafts on schedule", () => {
     expect(p?.slotId).toBe(slot.id);
     expect(p?.suggestedTopic).toBe(false);
     const v = (await db.query.postVersions.findFirst({ where: eq(schema.postVersions.postId, p!.id) }))!;
-    expect(v.promptVersion).toBe("draft-generation.v1");
+    expect(v.promptVersion).toBe("draft-generation.v2");
     expect(v.personaVersion).toBe(1);
     const link = (await outs(userId)).at(-1)!;
     expect(link).toMatch(/^Here's your draft for Tue 13 Oct, 9:00am/);

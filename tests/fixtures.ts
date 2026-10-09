@@ -35,9 +35,15 @@ export async function makeFixtures(p: People) {
     await db.update(schema.posts).set({ currentVersionId: pv.id }).where(eq(schema.posts.id, po.id));
     ids.post[t] = po.id;
   }
+  // Two organizations: one the PATCH spec edits, one the DELETE spec consumes.
+  const [org] = await db.insert(schema.organizations).values({ name: "Scope Org", context: "No client names." }).returning();
+  const [orgToDelete] = await db.insert(schema.organizations).values({ name: "Scope Org (disposable)" }).returning();
+
   return {
     subId: p.sub.id,
     adminId: p.admin.id,
+    orgId: org.id,
+    orgDeletableId: orgToDelete.id,
     personaJson,
     user: (t: T) => users[t],
     sample: (t: T) => ids.sample[t],

@@ -3,13 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Button, Field, Icon, Input, Notice } from "@/components/ui";
+import { Button, Field, Icon, Input, Notice, Select } from "@/components/ui";
 import { Orb } from "@/components/orb";
 
 const MIN_PASSWORD = 10;
+/** The option that reveals the free-text company field. */
+const OTHER = "other";
 
-export function RegisterForm() {
+export type Org = { id: string; name: string };
+
+export function RegisterForm({ organizations = [] }: { organizations?: Org[] }) {
   const [v, setV] = useState({ name: "", email: "", password: "", company: "", phone: "" });
+  // An admin's list should not be able to block a sign-up, so "not listed"
+  // always exists and falls back to the typed company name.
+  const [orgId, setOrgId] = useState(organizations.length ? "" : OTHER);
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,15 +25,18 @@ export function RegisterForm() {
   const [resent, setResent] = useState(false);
 
   const set = (k: keyof typeof v) => (e: React.ChangeEvent<HTMLInputElement>) => setV({ ...v, [k]: e.target.value });
+  const orgChosen = orgId === OTHER ? !!v.company.trim() : !!orgId;
   const ready =
-    v.name.trim().length > 1 && v.email.includes("@") && v.password.length >= MIN_PASSWORD && v.company.trim() && v.phone.trim().length > 5;
+    v.name.trim().length > 1 && v.email.includes("@") && v.password.length >= MIN_PASSWORD && orgChosen && v.phone.trim().length > 5;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await api("/api/auth/register", { body: v });
+      await api("/api/auth/register", {
+        body: orgId && orgId !== OTHER ? { ...v, company: "", organizationId: orgId } : v,
+      });
       setStage("verify");
     } catch (err) {
       setError((err as Error).message);
@@ -153,9 +163,26 @@ export function RegisterForm() {
         <Field label="Work email">
           <Input type="email" required autoComplete="email" value={v.email} onChange={set("email")} placeholder="you@company.com" />
         </Field>
-        <Field label="Company">
-          <Input required autoComplete="organization" value={v.company} onChange={set("company")} placeholder="Mediwira" />
-        </Field>
+        {organizations.length > 0 ? (
+          <Field label="Organisation" htmlFor="register-org">
+            <Select id="register-org" required value={orgId} onChange={(e) => setOrgId(e.target.value)}>
+              <option value="" disabled>
+                Choose your organisation…
+              </option>
+              {organizations.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+              <option value={OTHER}>My organisation isn&apos;t listed</option>
+            </Select>
+          </Field>
+        ) : null}
+        {(organizations.length === 0 || orgId === OTHER) && (
+          <Field label={organizations.length ? "Company name" : "Company"}>
+            <Input required autoComplete="organization" value={v.company} onChange={set("company")} placeholder="Mediwira" />
+          </Field>
+        )}
         <Field label="WhatsApp number" hint="International format — this is where drafts arrive for approval.">
           <Input
             type="tel"
