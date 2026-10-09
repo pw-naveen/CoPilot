@@ -5,6 +5,8 @@
  *   npx tsx scripts/doctor.ts
  */
 import "dotenv/config";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { desc, eq } from "drizzle-orm";
 import IORedis from "ioredis";
 import { db, schema, pg } from "../src/db";
@@ -32,6 +34,18 @@ try {
 }
 ok(redisUp, "Redis reachable", "start Redis — without it jobs are queued but never run");
 ok(true, `Postgres reachable (${(await db.execute("select 1")) ? "yes" : "no"})`);
+
+console.log("\nSchema");
+try {
+  const journal = JSON.parse(readFileSync(join(process.cwd(), "drizzle/meta/_journal.json"), "utf8")) as { entries: { tag: string }[] };
+  const [{ count }] = await db.execute<{ count: string }>(
+    "select count(*)::text as count from drizzle.__drizzle_migrations",
+  );
+  const behind = journal.entries.length - Number(count);
+  ok(behind <= 0, behind > 0 ? `${behind} migration(s) not applied` : `all ${journal.entries.length} migrations applied`, "npm run db:migrate");
+} catch {
+  ok(false, "could not read migration state", "npm run db:migrate");
+}
 
 console.log("\nCredentials");
 const key = await getSetting("openai.api_key");

@@ -14,8 +14,19 @@ npm install
 npm run db:migrate
 npm run db:seed                 # 4 directors, an admin, a sub-admin scoped to two of them
 npm run dev                     # web app on http://localhost:3000
-npm run worker                  # background worker (second terminal)
+npm run worker                  # second terminal; nothing transcribes without it
 ```
+
+### After pulling
+
+```bash
+npm run db:migrate              # `npm run dev` refuses to start while the schema is behind
+npm run doctor                  # Redis, Postgres, schema, credentials, stuck jobs
+```
+
+`tsx` does not hot-reload, so restart `npm run worker` after changing anything it
+runs — including API keys saved in Settings.
+
 
 Sign in at `/login` as `admin@example.com` (or `SEED_ADMIN_EMAIL`). With `EMAIL_SMTP_URL` empty, emails go to the **dev mailbox** at `/dev/mail`, which shows the sign-in link and code.
 
