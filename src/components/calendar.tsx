@@ -23,6 +23,10 @@ export type CalSlot = {
 export function Calendar({ slots, tz, now, postHref }: { slots: CalSlot[]; tz: string; now: Date; postHref: (postId: string) => string }) {
   if (!slots.length) return null;
   const nowDt = DateTime.fromJSDate(now, { zone: tz });
+  // The "send me a topic" nudge is identical on every open slot, so repeating it
+  // ten times down the list turns the agenda into wallpaper. Say it once, on the
+  // next one up.
+  const nextOpen = [...slots].filter((s) => s.status === "awaiting_input").sort((a, b) => +a.publishAt - +b.publishAt)[0]?.id;
 
   const weeks = new Map<string, CalSlot[]>();
   for (const s of slots) {
@@ -47,7 +51,7 @@ export function Calendar({ slots, tz, now, postHref }: { slots: CalSlot[]; tz: s
               {list
                 .sort((a, b) => +a.publishAt - +b.publishAt)
                 .map((s, i) => (
-                  <SlotRow key={s.id} s={s} tz={tz} now={now} first={i === 0} href={s.post ? postHref(s.post.id) : undefined} />
+                  <SlotRow key={s.id} s={s} tz={tz} now={now} first={i === 0} prompt={s.id === nextOpen} href={s.post ? postHref(s.post.id) : undefined} />
                 ))}
             </ul>
           </section>
@@ -57,7 +61,7 @@ export function Calendar({ slots, tz, now, postHref }: { slots: CalSlot[]; tz: s
   );
 }
 
-function SlotRow({ s, tz, now, first, href }: { s: CalSlot; tz: string; now: Date; first: boolean; href?: string }) {
+function SlotRow({ s, tz, now, first, prompt, href }: { s: CalSlot; tz: string; now: Date; first: boolean; prompt: boolean; href?: string }) {
   const risk = isAtRisk(s, now);
   const at = DateTime.fromJSDate(s.publishAt, { zone: tz });
   const today = at.hasSame(DateTime.fromJSDate(now, { zone: tz }), "day");
@@ -86,7 +90,7 @@ function SlotRow({ s, tz, now, first, href }: { s: CalSlot; tz: string; now: Dat
         </span>
         {s.post?.summary ? (
           <span className="mt-1 line-clamp-2 block text-[13px] text-ink-soft">{s.post.summary}</span>
-        ) : s.status === "awaiting_input" ? (
+        ) : s.status === "awaiting_input" && prompt ? (
           <span className="mt-1 block text-[13px] text-muted">Send a topic on WhatsApp, or we'll pick one from your pillars</span>
         ) : null}
         {!["approved", "missed", "skipped"].includes(s.status) && (

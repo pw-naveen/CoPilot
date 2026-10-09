@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Button, Notice } from "@/components/ui";
 
-const NEXT = ["", "", "voice", "persona", "tone", "cadence", "whatsapp", ""];
+const NEXT: Record<number, string> = { 2: "/onboarding/voice", 3: "/onboarding/persona", 4: "/onboarding/tone", 5: "/onboarding/cadence", 6: "/calendar" };
 
 /** "Continue" for the current step: completes it on the server, then moves on. */
 export function ContinueBar({
@@ -38,7 +38,7 @@ export function ContinueBar({
             try {
               await before?.();
               await api(`/api/users/${userId}/onboarding/step`, { body: { step } });
-              router.push(`/onboarding/${NEXT[step]}`);
+              router.push(NEXT[step] ?? "/");
               router.refresh();
             } catch (e) {
               setErr((e as Error).message);

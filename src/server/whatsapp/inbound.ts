@@ -85,7 +85,10 @@ export async function ingest(msg: InboundMessage) {
     })
     .returning();
 
-  if (!user.whatsappVerifiedAt) return handleVerification(user, text);
+  // The number is verified during sign-up, so an unverified one here means a
+  // message from a number we never confirmed. Record it and stop: do not start
+  // drafting for an account that was never reachable.
+  if (!user.whatsappVerifiedAt) return;
   if (user.status === "paused") return;
 
   // Attach to the open bundle (or start one), then debounce. A partial unique index
@@ -147,41 +150,29 @@ export async function processDueBundles() {
   return due.length;
 }
 
-// ── verification (onboarding step 7) ──────────────────────────────────────
-
 export const fmtLocal = (d: Date, tz: string) => DateTime.fromJSDate(d, { zone: tz }).toFormat("cccc d LLL, h:mma").replace("AM", "am").replace("PM", "pm");
 
-async function handleVerification(user: typeof schema.users.$inferSelect, text: string) {
-  const code = user.whatsappVerifyCode;
-  if (!code) return;
-  const words = text.toLowerCase();
-  if (!words.includes(code)) {
-    await queueMessage({ userId: user.id, phone: user.phoneE164, kind: "verify", text: `To confirm this number, reply with YES ${code}.` });
-    return;
-  }
-  await db
-    .update(schema.users)
-    .set({ whatsappVerifiedAt: new Date(), whatsappVerifyCode: null, status: "active" })
-    .where(eq(schema.users.id, user.id));
-  await audit({ type: "user", id: user.id, name: user.displayName, email: user.email }, { action: "whatsapp.verified", entity: "user", entityId: user.id, userId: user.id, after: { phone: user.phoneE164 } });
-  await generateSlots(user.id);
-  await sendWelcome(user.id);
-}
-
-export async function sendWelcome(userId: string) {
+export async function sendWelcome(userId: string, opts: { drafting?: boolean } = {}) {
   const u = (await db.query.users.findFirst({ where: eq(schema.users.id, userId) }))!;
   const first = await db.query.slots.findFirst({ where: eq(schema.slots.userId, userId), orderBy: (s, { asc }) => asc(s.publishAt) });
+  const outro = `Anytime you have a topic, event, photo or thought you'd like to share, just send it to me here. Voice notes work too.`;
   let text: string;
-  if (first) {
+  if (first && opts.drafting) {
+    // The first draft is queued the moment setup finishes, so promise it now.
+    const t = slotTimeline(first.publishAt, u.timezone);
+    text =
+      `Hi ${u.displayName}, you're all set. I'm writing your first draft now — it'll arrive here in a few minutes with a link to approve it. ` +
+      `It's for ${fmtLocal(first.publishAt, u.timezone)}, and I need your approval by ${fmtLocal(t.deadline, u.timezone)}. ${outro}`;
+  } else if (first) {
     const t = slotTimeline(first.publishAt, u.timezone);
     // The draft goes out between T−5 and T−4 days; promise the later bound.
     const draftBy = new Date(first.publishAt.getTime() - 4 * 86_400_000);
     text =
       `Hi ${u.displayName}, you're all set. I'll be sending your drafts here soon. ` +
       `Based on your calendar, your first post goes out on ${fmtLocal(first.publishAt, u.timezone)}, so I'll send the draft by ${fmtLocal(draftBy, u.timezone)} ` +
-      `and need your approval by ${fmtLocal(t.deadline, u.timezone)}. Anytime you have a topic, event, photo or thought you'd like to share, just send it to me here. Voice notes work too.`;
+      `and need your approval by ${fmtLocal(t.deadline, u.timezone)}. ${outro}`;
   } else {
-    text = `Hi ${u.displayName}, you're all set. Anytime you have a topic, event, photo or thought you'd like to share, just send it to me here. Voice notes work too.`;
+    text = `Hi ${u.displayName}, you're all set. ${outro}`;
   }
   await queueMessage({ userId, phone: u.phoneE164, kind: "welcome", text });
 }

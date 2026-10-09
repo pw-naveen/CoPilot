@@ -10,18 +10,18 @@ export function CadenceStep({ userId, editable, timezone, cadence }: { userId: s
   const router = useRouter();
   return (
     <>
-      <PageHeader lead="A steady rhythm" accent="beats a busy week." intro="Choose how often you post and when. You can change it any time; only future, unstarted posts move." />
+      <PageHeader lead="A steady rhythm" accent="beats a busy week." intro="Choose how often you post and when — this is the last step. You can change it any time; only future, unstarted posts move." />
       {!editable && <div className="mb-6"><ReviewOnly /></div>}
       <CadenceEditor
         userId={userId}
         timezone={timezone}
         initial={cadence}
         editable={true}
-        saveLabel={editable ? "Save and continue" : "Save cadence"}
+        saveLabel={editable ? "Finish setup" : "Save cadence"}
         onSaved={async () => {
           if (!editable) return;
           await api(`/api/users/${userId}/onboarding/step`, { body: { step: 6 } });
-          router.push("/onboarding/whatsapp");
+          router.push("/calendar");
           router.refresh();
         }}
       />

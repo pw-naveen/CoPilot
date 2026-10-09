@@ -70,7 +70,7 @@ export default async function UserDetail({ params }: { params: Promise<{ userId:
       <section className="mt-14">
         <h2 className="card-title mb-4">WhatsApp</h2>
         <Card className="max-w-3xl bg-blush-50/40">
-          <Thread messages={JSON.parse(JSON.stringify(messages))} />
+          <Thread messages={JSON.parse(JSON.stringify(messages))} perspective="assistant" />
         </Card>
       </section>
     </>

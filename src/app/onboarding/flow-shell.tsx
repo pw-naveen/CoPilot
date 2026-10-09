@@ -13,7 +13,6 @@ export const FLOW_STEPS = [
   { slug: "persona", label: "Persona" },
   { slug: "tone", label: "Tone check" },
   { slug: "cadence", label: "Cadence" },
-  { slug: "whatsapp", label: "WhatsApp" },
 ] as const;
 
 /**
@@ -113,10 +112,10 @@ function StepNav({ current, reached }: { current: number; reached: number }) {
 }
 
 /**
- * Setup cannot be skipped to the end: an account only goes active once WhatsApp
- * verification lands, and drafting needs the persona built in step 3. So the
- * honest exit is leaving and coming back, which this says plainly rather than
- * offering a "skip" that would strand the account half-built.
+ * Setup cannot be skipped to the end: drafting needs the persona built in step 3
+ * and a cadence in step 6, so an account that jumped ahead would be live with
+ * nothing to post. The honest exit is leaving and coming back, which this says
+ * plainly rather than offering a "skip" that would strand the account half-built.
  */
 function FinishLater() {
   const router = useRouter();
@@ -147,6 +146,7 @@ export function FlowShell({
   footer,
   onBack,
   reviewOnly,
+  width = "narrow",
 }: {
   children: ReactNode;
   current?: number;
@@ -157,10 +157,13 @@ export function FlowShell({
   footer?: ReactNode;
   onBack?: () => void;
   reviewOnly?: boolean;
+  /** Steps that lay out side by side (persona, tone, cadence) need the room. */
+  width?: "narrow" | "wide";
 }) {
   // Every step keeps a way out; a review-only step also gets prev/next.
   const nav = current && reached ? <StepNav current={current} reached={reached} /> : null;
   const resolvedFooter = footer ?? (reviewOnly ? nav : null);
+  const col = width === "wide" ? "max-w-[1080px]" : "max-w-xl";
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--bg)]">
       {orb === "ambient" && <AmbientOrb level={level} />}
@@ -189,7 +192,7 @@ export function FlowShell({
         </div>
         {current && reached ? (
           <div className="px-4 pt-3 sm:px-8">
-            <div className="mx-auto w-full max-w-xl">
+            <div className={cx("mx-auto w-full", col)}>
               <FlowProgress current={current} reached={reached} />
             </div>
           </div>
@@ -197,7 +200,7 @@ export function FlowShell({
       </header>
 
       <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 sm:px-8">
-        <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">{children}</div>
+        <div className={cx("mx-auto flex w-full flex-1 flex-col", col)}>{children}</div>
       </main>
 
       {resolvedFooter && (
@@ -205,7 +208,7 @@ export function FlowShell({
           className="relative z-10 flex-none border-t border-line bg-[color-mix(in_srgb,var(--bg)_86%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-8"
           style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         >
-          <div className="mx-auto w-full max-w-xl">{resolvedFooter}</div>
+          <div className={cx("mx-auto w-full", col)}>{resolvedFooter}</div>
         </footer>
       )}
     </div>

@@ -100,6 +100,27 @@ export async function queueDraft(slotId: string, opts: { suggestedTopic?: string
 }
 
 /**
+ * Draft the first post as soon as setup finishes, instead of waiting for the
+ * scheduler's T−5d window. A brand-new account's first slot can be a week out,
+ * so without this the user finishes onboarding and hears nothing for days — and
+ * the first draft is what teaches them how approval works.
+ *
+ * Marks the slot auto-drafted so the scheduler doesn't queue it a second time.
+ */
+export async function kickoffFirstDraft(userId: string) {
+  const slot = await db.query.slots.findFirst({
+    where: and(eq(schema.slots.userId, userId), eq(schema.slots.status, "awaiting_input")),
+    orderBy: asc(schema.slots.publishAt),
+  });
+  if (!slot) return null;
+  const { suggestions } = await import("../scheduler");
+  const topic = (await suggestions(userId, 1))[0];
+  await db.update(schema.slots).set({ autoDraftAt: await clockNow() }).where(eq(schema.slots.id, slot.id));
+  await queueDraft(slot.id, { suggestedTopic: topic });
+  return slot.id;
+}
+
+/**
  * Worker: write the draft, run the review pass (regenerate once on failure), and send
  * the preview link. A draft that fails review twice goes to staff, not the user.
  */
