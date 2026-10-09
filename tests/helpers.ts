@@ -11,9 +11,18 @@ export async function resetDb() {
     .map((t: any) => `"${t[Symbol.for("drizzle:Name")]}"`);
   await db.execute(sql.raw(`TRUNCATE ${tables.join(", ")} RESTART IDENTITY CASCADE`));
   // Rate-limit counters live in Redis, not Postgres, so truncating tables alone
-  // would carry one test's attempts into the next.
-  const keys = await redis().keys("rl:*");
-  if (keys.length) await redis().del(...keys);
+  // would carry one test's attempts into the next. Best-effort: the limiter
+  // itself fails open, so a suite that only touches Postgres should not hang
+  // for minutes because Redis happens to be down.
+  try {
+    const keys = await Promise.race([
+      redis().keys("rl:*"),
+      new Promise<string[]>((_, reject) => setTimeout(() => reject(new Error("redis timeout")), 2000)),
+    ]);
+    if (keys.length) await redis().del(...keys);
+  } catch {
+    /* Redis unavailable; rate-limit tests will report it themselves. */
+  }
   resetClockCache();
 }
 

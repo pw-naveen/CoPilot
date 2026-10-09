@@ -9,7 +9,16 @@ import { Orb } from "@/components/orb";
 import { FlowShell } from "../flow-shell";
 import { ReviewOnly } from "./step-common";
 
-type Answer = { key: string; text: string; transcript: string | null; audio: string | null };
+type TranscribeStatus = "none" | "pending" | "stalled" | "failed" | "done";
+type Answer = {
+  key: string;
+  text: string;
+  transcript: string | null;
+  audio: string | null;
+  status?: TranscribeStatus;
+  error?: string | null;
+  detail?: string | null;
+};
 type Sample = { id: string; source: string; text: string };
 type Stage = "intro" | "questions" | "prefs" | "samples" | "review";
 
@@ -32,7 +41,11 @@ export function VoiceStep(p: {
   const [i, setI] = useState(0);
 
   const answered = p.questions.filter((q) => answeredQ(answers[q.key])).length;
-  const pending = useMemo(() => p.questions.filter((q) => answers[q.key]?.audio && !answers[q.key]?.transcript).map((q) => q.key), [answers, p.questions]);
+  const pending = useMemo(
+    () => p.questions.filter((q) => answers[q.key]?.audio && !answers[q.key]?.transcript && answers[q.key]?.status !== "failed").map((q) => q.key),
+    [answers, p.questions],
+  );
+  const failed = useMemo(() => p.questions.filter((q) => answers[q.key]?.status === "failed").map((q) => q.key), [answers, p.questions]);
 
   const update = useCallback((key: string, patch: Partial<Answer>) => {
     setAnswers((prev) => {
@@ -49,14 +62,23 @@ export function VoiceStep(p: {
     let live = true;
     const id = setInterval(async () => {
       try {
-        const { answers: rows } = await api<{ answers: { key: string; hasAudio: boolean; transcript: string | null }[] }>(`/api/users/${p.userId}/answers`);
+        const { answers: rows } = await api<{
+          answers: { key: string; hasAudio: boolean; transcript: string | null; status: TranscribeStatus; error: string | null; detail: string | null }[];
+        }>(`/api/users/${p.userId}/answers`);
         if (!live) return;
         setAnswers((prev) => {
           const next = { ...prev };
           for (const r of rows) {
             const cur = next[r.key];
-            if (cur && r.transcript && !cur.transcript) next[r.key] = { ...cur, transcript: r.transcript };
-            if (cur && !r.hasAudio && cur.audio) next[r.key] = { ...cur, audio: null, transcript: null };
+            if (!cur) continue;
+            next[r.key] = {
+              ...cur,
+              transcript: r.transcript ?? cur.transcript,
+              audio: r.hasAudio ? cur.audio : null,
+              status: r.status,
+              error: r.error,
+              detail: r.detail,
+            };
           }
           return next;
         });
@@ -136,7 +158,7 @@ export function VoiceStep(p: {
           setStage("questions");
         }}
       />
-      <Finish userId={p.userId} answered={answered} pending={pending.length} />
+      <Finish userId={p.userId} answered={answered} pending={pending.length} failed={failed.length} />
     </Flow>
   );
 }
@@ -292,7 +314,14 @@ function QuestionScreen(p: {
       </div>
 
       {a?.audio ? (
-        <RecordedAnswer answer={a} onDiscard={discard} />
+        <RecordedAnswer
+          answer={a}
+          onDiscard={discard}
+          onRetry={async () => {
+            p.onPatch({ status: "pending", error: null, detail: null });
+            await api(`/api/users/${p.userId}/answers/${p.q.key}/audio`, { method: "PUT" }).catch(() => {});
+          }}
+        />
       ) : typing ? (
         <div className="flex flex-col gap-3">
           <Textarea
@@ -407,24 +436,82 @@ function MicPanel({ rec, uploading, onType }: { rec: ReturnType<typeof useRecord
   );
 }
 
-function RecordedAnswer({ answer, onDiscard }: { answer: Answer; onDiscard: () => void }) {
+function RecordedAnswer({ answer, onDiscard, onRetry }: { answer: Answer; onDiscard: () => void; onRetry: () => void }) {
+  const [retrying, setRetrying] = useState(false);
+  const status = answer.status ?? (answer.transcript ? "done" : "pending");
+  const failed = status === "failed";
+  const stalled = status === "stalled";
+
   return (
     <Card className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 flex-none place-items-center rounded-full bg-red">
-          <Icon name="check" size={20} className="text-white" />
+        <span
+          className={cx(
+            "grid h-10 w-10 flex-none place-items-center rounded-full",
+            failed ? "border border-red bg-blush-50" : "bg-red",
+          )}
+        >
+          <Icon name={failed ? "warning" : "check"} size={20} className={failed ? "text-red-text" : "text-white"} />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[15px] font-semibold text-ink">Answer recorded</p>
-          <p className="text-[13px] text-muted">{answer.transcript ? "Transcribed" : "Transcribing in the background…"}</p>
+          <p className="text-[15px] font-semibold text-ink">{failed ? "Transcription failed" : "Answer recorded"}</p>
+          <p className="text-[13px] text-muted">
+            {status === "done"
+              ? "Transcribed"
+              : failed
+                ? (answer.error ?? "We couldn't transcribe that recording.")
+                : stalled
+                  ? "Queued, but nothing has picked it up yet."
+                  : "Transcribing in the background…"}
+          </p>
         </div>
-        <button onClick={onDiscard} aria-label="Discard recording" className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted hover:bg-blush-50 hover:text-red-text">
+        <button
+          onClick={onDiscard}
+          aria-label="Discard recording"
+          className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted transition-colors hover:bg-blush-50 hover:text-red-text focus-visible:ring-2 focus-visible:ring-red focus-visible:outline-none"
+        >
           <Icon name="trash" size={18} className="text-current" />
         </button>
       </div>
+
       {answer.audio && <audio src={answer.audio} controls className="h-10 w-full" />}
+
+      {(failed || stalled) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={retrying}
+            onClick={async () => {
+              setRetrying(true);
+              await onRetry();
+              setRetrying(false);
+            }}
+          >
+            <Icon name="arrow-counter-clockwise" size={15} className="text-current" />
+            {retrying ? "Retrying…" : "Try again"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onDiscard}>
+            Discard and type instead
+          </Button>
+        </div>
+      )}
+
+      {/* Development only: the real error, so a failure is diagnosable without
+          digging through worker logs. Served only when DEV_TOOLS is on. */}
+      {answer.detail && (
+        <details className="rounded-[10px] border border-line bg-surface-sunken px-3 py-2">
+          <summary className="cursor-pointer text-[12px] font-semibold text-muted">
+            {stalled ? "Why is this stuck?" : "Error detail"} <span className="font-normal">(development only)</span>
+          </summary>
+          <pre className="mt-2 max-h-40 overflow-auto text-[11px] leading-relaxed whitespace-pre-wrap text-ink-soft">
+            {answer.detail}
+          </pre>
+        </details>
+      )}
+
       {answer.transcript && (
-        <div className="rounded-[16px] bg-blush-50 px-4 py-3">
+        <div className="rounded-[10px] bg-blush-50 px-4 py-3">
           <Label>Transcript</Label>
           <p className="mt-1 text-[14px] text-ink-soft">{answer.transcript}</p>
         </div>
@@ -472,6 +559,8 @@ function Review(p: {
                   <span className="block text-[14px] font-medium text-ink">{q.q}</span>
                   {body ? (
                     <span className="mt-0.5 line-clamp-2 text-[13px] text-muted">{body}</span>
+                  ) : a?.status === "failed" ? (
+                    <span className="mt-0.5 block text-[13px] text-red-text">Voice note saved · transcription failed</span>
                   ) : waiting ? (
                     <span className="mt-0.5 block text-[13px] text-muted">Voice note saved · transcribing…</span>
                   ) : (
@@ -493,7 +582,7 @@ function Review(p: {
  * is the right invariant, so this waits it out visibly instead of surfacing it as
  * an error — by this point the recordings made earlier have usually finished.
  */
-function Finish({ userId, answered, pending }: { userId: string; answered: number; pending: number }) {
+function Finish({ userId, answered, pending, failed }: { userId: string; answered: number; pending: number; failed: number }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -504,7 +593,7 @@ function Finish({ userId, answered, pending }: { userId: string; answered: numbe
       {err && <p className="mb-4 rounded-[16px] bg-blush-50 px-4 py-3 text-[14px] text-red-text">{err}</p>}
       <Button
         className="w-full"
-        disabled={!enough || busy || pending > 0}
+        disabled={!enough || busy || pending > 0 || failed > 0}
         onClick={async () => {
           setBusy(true);
           setErr(null);
@@ -522,11 +611,13 @@ function Finish({ userId, answered, pending }: { userId: string; answered: numbe
         <Icon name="sparkle" size={18} className="text-current" />
       </Button>
       <p className="mt-3 text-center text-[13px] text-muted">
-        {pending > 0
-          ? `Finishing ${pending} voice note${pending > 1 ? "s" : ""}…`
-          : enough
-            ? `${answered} answers ready`
-            : `Answer ${MIN - answered} more to continue`}
+        {failed > 0
+          ? `${failed} recording${failed > 1 ? "s" : ""} didn't transcribe — retry or discard ${failed > 1 ? "them" : "it"} to continue`
+          : pending > 0
+            ? `Finishing ${pending} voice note${pending > 1 ? "s" : ""}…`
+            : enough
+              ? `${answered} answers ready`
+              : `Answer ${MIN - answered} more to continue`}
       </p>
     </div>
   );

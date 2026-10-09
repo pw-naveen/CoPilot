@@ -7,6 +7,7 @@ import { badRequest, conflict, notFound } from "../errors";
 import { enqueue } from "../jobs";
 import { PREF_KEYS, QUESTIONS, SAMPLE_KINDS } from "../persona-schema";
 import { assertUserAccess } from "../scope";
+import { devToolsEnabled } from "../clock";
 import { newKey, storage } from "../storage";
 import { activePersona } from "./persona";
 
@@ -125,18 +126,82 @@ export async function clearAudioAnswer(actor: AnyActor, userId: string, key: str
     .where(and(eq(schema.onboardingAnswers.userId, userId), eq(schema.onboardingAnswers.questionKey, key)));
 }
 
-/** Just enough to drive the questionnaire's progress and pending-transcript state. */
+/** How long a job may sit unclaimed before we stop calling it "in progress". */
+const WORKER_STALL_MS = 45_000;
+
+/**
+ * Drives the questionnaire's progress and, more importantly, says *why* a voice
+ * note is not transcribed yet. Without this a failed job is indistinguishable
+ * from a slow one and the UI claims "transcribing" forever.
+ *
+ * `detail` is the real error and is only populated when DEV_TOOLS is on.
+ */
 export async function answerStates(actor: AnyActor, userId: string) {
   await user(actor, userId);
-  const rows = await db.query.onboardingAnswers.findMany({ where: eq(schema.onboardingAnswers.userId, userId) });
+  const [rows, jobs] = await Promise.all([
+    db.query.onboardingAnswers.findMany({ where: eq(schema.onboardingAnswers.userId, userId) }),
+    db.query.jobs.findMany({
+      where: and(eq(schema.jobs.userId, userId), eq(schema.jobs.kind, "transcribe_answer")),
+      orderBy: (j, { desc }) => desc(j.createdAt),
+      limit: 60,
+    }),
+  ]);
+
+  // Newest job per question key.
+  const latest = new Map<string, (typeof jobs)[number]>();
+  for (const j of jobs) {
+    const key = (j.input as { key?: string } | null)?.key;
+    if (key && !latest.has(key)) latest.set(key, j);
+  }
+  const dev = devToolsEnabled();
+  const now = Date.now();
+
   return {
-    answers: rows.map((a) => ({
-      key: a.questionKey,
-      text: a.text ?? "",
-      hasAudio: !!a.audioUrl,
-      transcript: a.transcript,
-    })),
+    answers: rows.map((a) => {
+      const job = latest.get(a.questionKey);
+      let status: "none" | "pending" | "stalled" | "failed" | "done" = "none";
+      if (a.transcript) status = "done";
+      else if (a.audioUrl) {
+        if (!job) status = "pending";
+        else if (job.status === "failed") status = "failed";
+        else if (job.status === "queued" && now - job.createdAt.getTime() > WORKER_STALL_MS) status = "stalled";
+        else status = "pending";
+      }
+      return {
+        key: a.questionKey,
+        text: a.text ?? "",
+        hasAudio: !!a.audioUrl,
+        transcript: a.transcript,
+        status,
+        attempts: job?.attempts ?? 0,
+        error: status === "failed" ? (job?.error ?? "Transcription failed.") : null,
+        detail: dev && status !== "done" ? (job?.errorDetail ?? null) : null,
+      };
+    }),
+    // A job stuck in `queued` almost always means nothing is draining the queue.
+    workerStalled: rows.some((a) => {
+      const j = latest.get(a.questionKey);
+      return !a.transcript && !!a.audioUrl && j?.status === "queued" && now - j.createdAt.getTime() > WORKER_STALL_MS;
+    }),
+    dev,
   };
+}
+
+/** Re-queue transcription for audio that is already stored. */
+export async function retryTranscription(actor: AnyActor, userId: string, key: string) {
+  await user(actor, userId);
+  const a = await db.query.onboardingAnswers.findFirst({
+    where: and(eq(schema.onboardingAnswers.userId, userId), eq(schema.onboardingAnswers.questionKey, key)),
+  });
+  if (!a?.audioUrl) throw badRequest("There is no recording to transcribe");
+  await db
+    .update(schema.onboardingAnswers)
+    .set({ transcript: null })
+    .where(and(eq(schema.onboardingAnswers.userId, userId), eq(schema.onboardingAnswers.questionKey, key)));
+  const ext = a.audioUrl.split(".").pop()?.toLowerCase();
+  const mime =
+    ext === "m4a" || ext === "mp4" ? "audio/mp4" : ext === "ogg" ? "audio/ogg" : ext === "mp3" ? "audio/mpeg" : "audio/webm";
+  return enqueue("transcribe_answer", userId, { key, storageKey: a.audioUrl, mime });
 }
 
 export async function addSample(actor: AnyActor, userId: string, text: string, source: string) {

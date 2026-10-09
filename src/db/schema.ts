@@ -429,6 +429,8 @@ export const jobs = pgTable("jobs", {
   status: text("status").notNull().default("queued"), // queued | running | done | failed
   input: jsonb("input"),
   result: jsonb("result"),
-  error: text("error"),
+  error: text("error"), // safe to show anyone
+  errorDetail: text("error_detail"), // real message and stack; only served when DEV_TOOLS is on
+  attempts: integer("attempts").notNull().default(0),
   ...timestamps,
 });
