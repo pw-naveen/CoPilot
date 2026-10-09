@@ -6,6 +6,7 @@ import { api, waitForJob } from "@/lib/api";
 import { LinkedInPreview } from "@/components/linkedin-preview";
 import { Button, Card, Icon, IconCircle, Label, Notice, PageHeader, Textarea, cx } from "@/components/ui";
 import { ReviewOnly } from "./step-common";
+import { Working } from "@/components/working";
 
 type Sample = { id: string; kind: string; text: string; verdict: string | null; comment: string | null; rounds: number; updatedAt: string };
 
@@ -31,18 +32,19 @@ export function ToneStep(p: { userId: string; editable: boolean; kinds: { kind: 
   return (
     <>
       <PageHeader
-        eyebrow="Step 4 · Tone check"
         lead="Three posts."
         accent="Do they sound like you?"
         intro="Mark each one. If it's close or off, say why: your comment updates the persona and the post is rewritten."
       />
       {!p.editable && <div className="mb-6"><ReviewOnly /></div>}
       {missing ? (
-        <Card className="flex flex-col items-center gap-4 py-16 text-center">
-          <IconCircle name="note-pencil" />
-          <p className="card-title">Writing your samples</p>
-          <p className="text-muted">One professional insight, one personal reflection, one milestone.</p>
-          <RetryAfter userId={p.userId} />
+        <Card className="p-0">
+          <Working title="Writing your samples" size={104}>
+            One professional insight, one personal reflection, one milestone.
+          </Working>
+          <div className="px-6 pb-6 text-center">
+            <RetryAfter userId={p.userId} />
+          </div>
         </Card>
       ) : (
         <>

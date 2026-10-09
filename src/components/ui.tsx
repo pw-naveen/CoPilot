@@ -383,3 +383,50 @@ export function Orb({ size = 96, level = 0, icon, className }: { size?: number; 
     </span>
   );
 }
+
+/**
+ * Stat tile. Label in sentence case, value semibold in proportional figures —
+ * `tabular-nums` is for columns that must align, and at display sizes it makes
+ * a number like 121 look loose. `tone` ships with its own icon and label so the
+ * state is never carried by colour alone.
+ */
+export function StatTile({
+  label,
+  value,
+  hint,
+  tone = "neutral",
+  icon,
+  href,
+}: {
+  label: string;
+  value: number | string;
+  hint?: string;
+  tone?: "neutral" | "attention";
+  icon?: IconName;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <span className="flex items-center gap-1.5">
+        {icon && <Icon name={icon} size={14} className={tone === "attention" ? "text-red-text" : "text-graphite-700"} />}
+        <span className="text-[11px] leading-tight font-medium text-muted sm:text-[12px]">{label}</span>
+      </span>
+      <span className={cx("text-[26px] leading-none font-semibold tracking-[-0.02em] sm:text-[30px]", tone === "attention" ? "text-red-text" : "text-ink")}>
+        {value}
+      </span>
+      {hint && <span className="hidden text-[12px] text-graphite-700 sm:block">{hint}</span>}
+    </>
+  );
+  const cls = cx(
+    "flex min-w-0 flex-col gap-2 rounded-[16px] border p-4 transition-colors",
+    tone === "attention" ? "border-blush-300 bg-blush-50" : "border-line bg-surface",
+    href && "hover:border-line-strong",
+  );
+  return href ? (
+    <Link href={href} className={cls}>
+      {body}
+    </Link>
+  ) : (
+    <div className={cls}>{body}</div>
+  );
+}

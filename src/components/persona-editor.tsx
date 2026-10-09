@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { api, waitForJob } from "@/lib/api";
 import type { Persona } from "@/server/persona-schema";
 import { Button, Card, Icon, IconCircle, Input, Label, Notice, Statement, Textarea, cx } from "./ui";
+import { Working } from "./working";
 
 const lines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
 
@@ -16,10 +17,10 @@ export function PersonaPending() {
     return () => clearInterval(t);
   }, [router]);
   return (
-    <Card className="flex flex-col items-center gap-4 py-16 text-center">
-      <IconCircle name="sparkle" />
-      <p className="card-title">Building your persona</p>
-      <p className="max-w-md text-muted">Reading your answers and samples. This usually takes under a minute.</p>
+    <Card className="p-0">
+      <Working title="Building your persona" size={104}>
+        Reading your answers and samples. This usually takes under a minute.
+      </Working>
     </Card>
   );
 }

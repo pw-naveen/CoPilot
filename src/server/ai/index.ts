@@ -255,6 +255,25 @@ export function reviseDraft(userId: string, a: { persona: Persona; text: string;
 
 // ── Media ─────────────────────────────────────────────────────────────────
 
+/**
+ * Names the speaker will actually say, so the transcriber spells them right.
+ * Whisper-family models accept a `prompt` as a vocabulary hint: an employer
+ * called "Mediwira" otherwise comes back as Medivira, Mediveera or Medi Wira,
+ * and every one of those lands in the persona as if the user had said it.
+ */
+export async function transcriptionHint(userId: string | null): Promise<string | undefined> {
+  if (!userId) return undefined;
+  const { db, schema } = await import("@/db");
+  const { eq } = await import("drizzle-orm");
+  const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!u) return undefined;
+  const terms = [u.displayName, u.name, u.org, u.specialty, u.title].filter((t): t is string => !!t && t.trim().length > 1);
+  const unique = [...new Set(terms.map((t) => t.trim()))];
+  if (!unique.length) return undefined;
+  // A plain sentence of proper nouns biases spelling without steering content.
+  return `The speaker may mention: ${unique.join(", ")}.`;
+}
+
 export async function transcribe(userId: string | null, audio: Buffer, mime: string, questionKey?: string): Promise<string> {
   const ai = await openai();
   const model = models().transcribe;
@@ -265,7 +284,12 @@ export async function transcribe(userId: string | null, audio: Buffer, mime: str
   }
   try {
     const ext = mime.includes("ogg") ? "ogg" : mime.includes("mp4") || mime.includes("m4a") ? "m4a" : mime.includes("mpeg") ? "mp3" : "webm";
-    const res = await ai.audio.transcriptions.create({ file: await toFile(audio, `voice.${ext}`, { type: mime }), model });
+    const prompt = await transcriptionHint(userId).catch(() => undefined);
+    const res = await ai.audio.transcriptions.create({
+      file: await toFile(audio, `voice.${ext}`, { type: mime }),
+      model,
+      ...(prompt ? { prompt } : {}),
+    });
     await log({ userId, kind: "speech_to_text", promptVersion: "n/a", model, ok: true, started });
     return res.text;
   } catch (err) {

@@ -165,23 +165,35 @@ export function FlowShell({
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--bg)]">
       {orb === "ambient" && <AmbientOrb level={level} />}
 
-      <header className="relative z-10 flex flex-none items-center gap-4 px-4 pt-4 pb-1 sm:px-8 sm:pt-6">
-        {onBack ? (
-          <button
-            onClick={onBack}
-            aria-label="Back"
-            className="grid h-11 w-11 flex-none place-items-center rounded-full text-muted transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-ink focus-visible:ring-2 focus-visible:ring-red focus-visible:outline-none"
-          >
-            <Icon name="caret-left" size={20} className="text-current" />
-          </button>
-        ) : (
-          <Logo height={34} />
-        )}
-        {current && reached ? <FlowProgress current={current} reached={reached} /> : <div className="flex-1" />}
-        <div className="flex flex-none items-center gap-3">
-          {name && <span className="hidden text-[12px] text-muted sm:block">{name}</span>}
-          <FinishLater />
+      {/* Two rows, not one. Brand and account are chrome; the step and its
+          progress are content, and crowding them onto the logo line made the
+          rail compete with the exit control for the same eye. */}
+      <header className="relative z-10 flex-none">
+        <div className="flex items-center gap-4 px-4 pt-4 sm:px-8 sm:pt-5">
+          {onBack ? (
+            <button
+              onClick={onBack}
+              aria-label="Back"
+              className="-ml-2 grid h-11 w-11 flex-none place-items-center rounded-full text-muted transition-colors hover:bg-[rgba(255,255,255,0.06)] hover:text-ink focus-visible:ring-2 focus-visible:ring-red focus-visible:outline-none"
+            >
+              <Icon name="caret-left" size={20} className="text-current" />
+            </button>
+          ) : (
+            <Logo height={34} />
+          )}
+          <div className="flex-1" />
+          <div className="flex flex-none items-center gap-4">
+            {name && <span className="hidden text-[12px] text-muted sm:block">{name}</span>}
+            <FinishLater />
+          </div>
         </div>
+        {current && reached ? (
+          <div className="px-4 pt-3 sm:px-8">
+            <div className="mx-auto w-full max-w-xl">
+              <FlowProgress current={current} reached={reached} />
+            </div>
+          </div>
+        ) : null}
       </header>
 
       <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 sm:px-8">

@@ -187,6 +187,22 @@ export async function answerStates(actor: AnyActor, userId: string) {
   };
 }
 
+/**
+ * Replace a machine transcript with the user's correction.
+ *
+ * This writes `transcript`, not `text`: the persona builder concatenates both
+ * fields, so saving a correction as text would feed it the corrected and the
+ * original wording together.
+ */
+export async function saveTranscript(actor: AnyActor, userId: string, key: string, transcript: string) {
+  await user(actor, userId);
+  if (!QUESTIONS.some((q) => q.key === key)) throw badRequest("Unknown question");
+  await db
+    .update(schema.onboardingAnswers)
+    .set({ transcript: transcript.slice(0, 20_000) })
+    .where(and(eq(schema.onboardingAnswers.userId, userId), eq(schema.onboardingAnswers.questionKey, key)));
+}
+
 /** Re-queue transcription for audio that is already stored. */
 export async function retryTranscription(actor: AnyActor, userId: string, key: string) {
   await user(actor, userId);

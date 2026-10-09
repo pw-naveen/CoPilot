@@ -281,9 +281,8 @@ function QuestionScreen(p: {
       const res = await fetch(`/api/users/${p.userId}/answers/${p.q.key}/audio`, { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "That recording didn't upload");
-      p.onPatch({ audio: localUrl, transcript: null });
+      p.onPatch({ audio: localUrl, transcript: null, status: "pending" });
       setUploading(false);
-      p.onNext();
     } catch (e) {
       URL.revokeObjectURL(localUrl);
       setErr((e as Error).message);
@@ -317,6 +316,10 @@ function QuestionScreen(p: {
         <RecordedAnswer
           answer={a}
           onDiscard={discard}
+          onSaveTranscript={async (v) => {
+            p.onPatch({ transcript: v });
+            await api(`/api/users/${p.userId}/answers/${p.q.key}`, { method: "PUT", body: { transcript: v } }).catch(() => {});
+          }}
           onRetry={async () => {
             p.onPatch({ status: "pending", error: null, detail: null });
             await api(`/api/users/${p.userId}/answers/${p.q.key}/audio`, { method: "PUT" }).catch(() => {});
@@ -436,7 +439,58 @@ function MicPanel({ rec, uploading, onType }: { rec: ReturnType<typeof useRecord
   );
 }
 
-function RecordedAnswer({ answer, onDiscard, onRetry }: { answer: Answer; onDiscard: () => void; onRetry: () => void }) {
+/** The transcript is what reaches the persona, so it is editable, not a receipt. */
+function TranscriptField({ answer, onSave }: { answer: Answer; onSave: (v: string) => Promise<void> | void }) {
+  const [value, setValue] = useState(answer.transcript ?? "");
+  const [saved, setSaved] = useState(true);
+  const last = useRef(answer.transcript ?? "");
+
+  // A later poll can replace the text under the cursor; only accept it when
+  // this field has no unsaved edit of its own.
+  useEffect(() => {
+    if (saved && answer.transcript && answer.transcript !== last.current) {
+      last.current = answer.transcript;
+      setValue(answer.transcript);
+    }
+  }, [answer.transcript, saved]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <Label>What we heard</Label>
+        <span className="text-[11px] text-graphite-700">{saved ? "Saved" : "Unsaved"}</span>
+      </div>
+      <Textarea
+        value={value}
+        rows={5}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setSaved(false);
+        }}
+        onBlur={async () => {
+          if (value === last.current) return setSaved(true);
+          last.current = value;
+          await onSave(value);
+          setSaved(true);
+        }}
+        className="min-h-32 text-[14px]"
+      />
+      <p className="text-[12px] text-muted">Correct anything we misheard — this is what shapes your persona.</p>
+    </div>
+  );
+}
+
+function RecordedAnswer({
+  answer,
+  onDiscard,
+  onRetry,
+  onSaveTranscript,
+}: {
+  answer: Answer;
+  onDiscard: () => void;
+  onRetry: () => void;
+  onSaveTranscript: (v: string) => Promise<void> | void;
+}) {
   const [retrying, setRetrying] = useState(false);
   const status = answer.status ?? (answer.transcript ? "done" : "pending");
   const failed = status === "failed";
@@ -510,12 +564,16 @@ function RecordedAnswer({ answer, onDiscard, onRetry }: { answer: Answer; onDisc
         </details>
       )}
 
-      {answer.transcript && (
-        <div className="rounded-[10px] bg-blush-50 px-4 py-3">
-          <Label>Transcript</Label>
-          <p className="mt-1 text-[14px] text-ink-soft">{answer.transcript}</p>
+      {status === "pending" && !answer.transcript && (
+        <div className="flex items-center gap-3 rounded-[10px] border border-line bg-surface-sunken px-4 py-3">
+          <span className="relative grid h-7 w-7 flex-none place-items-center">
+            <Orb className="absolute inset-0" />
+          </span>
+          <p className="text-[13px] text-muted">Transcribing — you can edit it when it lands, or move on.</p>
         </div>
       )}
+
+      {answer.transcript && <TranscriptField answer={answer} onSave={onSaveTranscript} />}
     </Card>
   );
 }

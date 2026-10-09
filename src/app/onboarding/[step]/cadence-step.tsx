@@ -10,7 +10,7 @@ export function CadenceStep({ userId, editable, timezone, cadence }: { userId: s
   const router = useRouter();
   return (
     <>
-      <PageHeader eyebrow="Step 5 · Cadence" lead="A steady rhythm" accent="beats a busy week." intro="Choose how often you post and when. You can change it any time; only future, unstarted posts move." />
+      <PageHeader lead="A steady rhythm" accent="beats a busy week." intro="Choose how often you post and when. You can change it any time; only future, unstarted posts move." />
       {!editable && <div className="mb-6"><ReviewOnly /></div>}
       <CadenceEditor
         userId={userId}
