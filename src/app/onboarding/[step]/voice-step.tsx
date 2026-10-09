@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { clock, extFor, useRecorder } from "@/components/recorder";
-import { Button, Card, Icon, Label, Orb, ProgressRing, Textarea, cx } from "@/components/ui";
+import { Button, Card, Icon, Label, ProgressRing, Textarea, cx } from "@/components/ui";
+import { Orb } from "@/components/orb";
+import { FlowShell } from "../flow-shell";
 import { ReviewOnly } from "./step-common";
 
 type Answer = { key: string; text: string; transcript: string | null; audio: string | null };
@@ -24,6 +26,7 @@ export function VoiceStep(p: {
 }) {
   const [answers, setAnswers] = useState<Record<string, Answer>>(Object.fromEntries(p.answers.map((a) => [a.key, a])));
   const [stage, setStage] = useState<Stage>(() => (p.answers.some(answeredQ) ? "review" : "intro"));
+  const [micLevel, setMicLevel] = useState(0);
   const [i, setI] = useState(0);
 
   const answered = p.questions.filter((q) => answeredQ(answers[q.key])).length;
@@ -75,7 +78,7 @@ export function VoiceStep(p: {
       </div>
     );
 
-  const common = { userId: p.userId, answers, answered, total: p.questions.length };
+  const common = { userId: p.userId, answers, answered, total: p.questions.length, level: micLevel };
 
   if (stage === "intro") return <Intro total={p.questions.length} onStart={() => setStage("questions")} />;
 
@@ -94,6 +97,7 @@ export function VoiceStep(p: {
           q={q}
           n={i + 1}
           answer={answers[q.key]}
+          onLevel={setMicLevel}
           onPatch={(patch) => update(q.key, patch)}
           onNext={() => (i + 1 < p.questions.length ? setI(i + 1) : setStage("prefs"))}
           isLast={i + 1 === p.questions.length}
@@ -135,78 +139,78 @@ export function VoiceStep(p: {
 
 // ── Chrome ────────────────────────────────────────────────────────────────
 
-/**
- * The questionnaire owns the whole viewport rather than sitting inside the setup
- * page's chrome: one question at a time only works if nothing else competes with it.
- */
-function Screen({ children }: { children: React.ReactNode }) {
-  return <div className="wash fixed inset-0 z-50 overflow-y-auto overscroll-contain">{children}</div>;
-}
-
-/** Full-screen frame: progress ring up top, content centred, actions within thumb reach. */
+/** Stage frame for the questionnaire, on the shared journey shell. */
 function Flow(p: {
   title: string;
   answered: number;
   total: number;
+  level?: number;
   children: React.ReactNode;
   onBack?: () => void;
   onSkipAll?: () => void;
 }) {
   return (
-    <Screen>
-    <div className="flex min-h-[100dvh] flex-col">
-      <header className="sticky top-0 z-10 bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-6">
-        <div className="mx-auto flex w-full max-w-xl items-center gap-4">
-        {p.onBack ? (
-          <button onClick={p.onBack} aria-label="Back" className="grid h-10 w-10 flex-none place-items-center rounded-full text-muted hover:bg-blush-50 hover:text-red-text">
-            <Icon name="caret-left" size={22} className="text-current" />
-          </button>
-        ) : (
-          <span className="h-10 w-10 flex-none" />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-ink">{p.title}</p>
-          <p className="text-[12px] text-muted">
-            {p.answered} of {p.total} answered{p.answered >= MIN ? " · enough to continue" : ` · ${MIN - p.answered} more to continue`}
-          </p>
-        </div>
-        <ProgressRing value={p.answered} max={p.total} size={44} stroke={4}>
+    <FlowShell
+      level={p.level}
+      onBack={p.onBack}
+      footer={
+        p.onSkipAll ? (
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[12px] text-muted tabular-nums">
+              {p.answered} of {p.total} answered
+            </span>
+            <button
+              onClick={p.onSkipAll}
+              className="rounded-[10px] px-2 py-1 text-[13px] font-semibold text-muted transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-red focus-visible:outline-none"
+            >
+              Skip to review
+            </button>
+          </div>
+        ) : undefined
+      }
+    >
+      <div className="flex items-center gap-3 pt-1 pb-5">
+        <ProgressRing value={p.answered} max={p.total} size={38} stroke={3}>
           {p.answered}
         </ProgressRing>
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold text-ink">{p.title}</p>
+          <p className="text-[12px] text-muted">
+            {p.answered >= MIN ? "Enough to continue" : `${MIN - p.answered} more to continue`}
+          </p>
         </div>
-      </header>
-      <main className="flex flex-1 flex-col px-4 pb-10 sm:px-6">{p.children}</main>
-      {p.onSkipAll && (
-        <footer className="px-4 pb-6 text-center sm:px-6">
-          <button onClick={p.onSkipAll} className="text-[13px] text-muted underline underline-offset-4 hover:text-red-text">
-            Skip to review
-          </button>
-        </footer>
-      )}
-    </div>
-    </Screen>
+      </div>
+      {p.children}
+    </FlowShell>
   );
 }
 
 function Intro({ total, onStart }: { total: number; onStart: () => void }) {
   return (
-    <Screen>
-    <div className="mx-auto flex min-h-[100dvh] max-w-xl flex-col justify-center gap-6 px-4 py-16 text-center">
-      <Orb size={104} icon="microphone" className="mx-auto" />
-      <h1 className="title title-hero">
-        <span>Tell us</span>
-        <span className="accent">how you think.</span>
-      </h1>
-      <p className="lead">
-        {total} short questions, one at a time. Talk your answers out loud — it's faster than typing and we learn far more
-        from how you actually speak.
-      </p>
-      <p className="text-[14px] text-muted">Answer at least {MIN}. You can stop and come back whenever you like.</p>
-      <Button className="mx-auto w-full sm:w-auto" onClick={onStart}>
-        Start <Icon name="arrow-right" size={18} className="text-current" />
-      </Button>
-    </div>
-    </Screen>
+    <FlowShell
+      footer={
+        <Button className="w-full" onClick={onStart}>
+          Start <Icon name="arrow-right" size={18} className="text-current" />
+        </Button>
+      }
+    >
+      <div className="flex flex-1 flex-col items-center justify-center gap-7 py-10 text-center">
+        <span className="relative grid h-[136px] w-[136px] flex-none place-items-center">
+          <Orb className="absolute inset-0" />
+          <Icon name="microphone" size={42} className="relative z-10 text-white" />
+        </span>
+        <div className="flex flex-col gap-3">
+          <h1 className="text-[30px] leading-[1.08] font-semibold tracking-[-0.03em] text-balance text-ink sm:text-[36px]">
+            Tell us how you think.
+          </h1>
+          <p className="text-[16px] leading-relaxed text-balance text-muted">
+            {total} short questions, one at a time. Talk your answers out loud — it's faster than typing, and we learn
+            far more from how you actually speak.
+          </p>
+          <p className="text-[13px] text-graphite-700">Answer at least {MIN}. Stop and come back whenever you like.</p>
+        </div>
+      </div>
+    </FlowShell>
   );
 }
 
@@ -218,6 +222,7 @@ function QuestionScreen(p: {
   n: number;
   answer?: Answer;
   onPatch: (patch: Partial<Answer>) => void;
+  onLevel: (v: number) => void;
   onNext: () => void;
   isLast: boolean;
 }) {
@@ -267,6 +272,13 @@ function QuestionScreen(p: {
 
   const rec = useRecorder({ onDone: upload });
   const hasAnswer = !!(text.trim() || a?.audio);
+
+  // Publish mic level so the shell's orb reacts to the voice, not just the button.
+  const report = p.onLevel;
+  useEffect(() => {
+    report(rec.state === "recording" ? rec.level : 0);
+    return () => report(0);
+  }, [rec.level, rec.state, report]);
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-6 py-6">
@@ -353,9 +365,14 @@ function MicPanel({ rec, uploading, onType }: { rec: ReturnType<typeof useRecord
         disabled={uploading}
         onClick={recording ? rec.stop : rec.start}
         aria-label={recording ? "Stop recording" : "Start recording"}
-        className="rounded-full transition-transform active:scale-95 disabled:opacity-60"
+        className={cx(
+          "relative grid h-[164px] w-[164px] place-items-center rounded-full transition-transform duration-200",
+          "active:scale-95 disabled:opacity-60",
+          "focus-visible:ring-2 focus-visible:ring-red focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--bg)] focus-visible:outline-none",
+        )}
       >
-        <Orb size={132} level={recording ? rec.level : 0} icon={recording ? "stop" : "microphone"} />
+        <Orb level={recording ? rec.level : 0} className="absolute inset-0" />
+        <Icon name={recording ? "stop" : "microphone"} size={46} className="relative z-10 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" />
       </button>
 
       <div className="text-center">

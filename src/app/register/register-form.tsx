@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Button, Field, Icon, Input, Notice, Orb } from "@/components/ui";
+import { Button, Field, Icon, Input, Notice } from "@/components/ui";
+import { Orb } from "@/components/orb";
 
 const MIN_PASSWORD = 10;
 
@@ -35,7 +36,10 @@ export function RegisterForm() {
     return (
       <div className="rise mx-auto w-full max-w-sm text-center">
         <div className="flex flex-col items-center gap-5">
-          <Orb size={88} icon="check" />
+          <span className="relative grid h-[104px] w-[104px] flex-none place-items-center">
+            <Orb className="absolute inset-0" />
+            <Icon name="check" size={36} className="relative z-10 text-white" />
+          </span>
           <h1 className="text-[28px] leading-tight font-bold text-ink">You're on the list</h1>
           <p className="text-[15px] text-muted">
             Your account is waiting for an administrator to approve it. We'll email{" "}
@@ -51,7 +55,9 @@ export function RegisterForm() {
   return (
     <div className="mx-auto w-full max-w-sm">
       <div className="rise flex flex-col items-center gap-5 text-center">
-        <Orb size={80} icon="sparkle" />
+        <span className="relative grid h-[88px] w-[88px] flex-none place-items-center">
+          <Orb className="absolute inset-0" />
+        </span>
         <div>
           <h1 className="text-[28px] leading-tight font-bold text-ink">Create your account</h1>
           <p className="mt-1.5 text-[15px] text-muted">An administrator approves new accounts before first sign-in.</p>
