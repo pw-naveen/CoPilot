@@ -19,6 +19,8 @@ const answeredQ = (a?: Answer) => !!((a?.text ?? "").trim() || a?.audio);
 export function VoiceStep(p: {
   userId: string;
   editable: boolean;
+  reached: number;
+  displayName: string;
   questions: { key: string; q: string }[];
   answers: Answer[];
   prefs: Record<string, string>;
@@ -68,14 +70,16 @@ export function VoiceStep(p: {
     };
   }, [pending.length, p.editable, p.userId]);
 
+  // Reviewing a finished step: same shell as every other, so the step
+  // navigation and the way out are in the places they always are.
   if (!p.editable)
     return (
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-6">
+      <FlowShell current={3} reached={p.reached} name={p.displayName} reviewOnly>
+        <div className="py-5">
           <ReviewOnly />
         </div>
         <Review questions={p.questions} answers={answers} userId={p.userId} editable={false} onJump={() => {}} />
-      </div>
+      </FlowShell>
     );
 
   const common = { userId: p.userId, answers, answered, total: p.questions.length, level: micLevel };

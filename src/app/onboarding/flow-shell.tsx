@@ -3,7 +3,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AmbientOrb } from "@/components/ambient-orb";
-import { Icon, Logo, cx } from "@/components/ui";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ButtonLink, Icon, Logo, cx } from "@/components/ui";
 
 export const FLOW_STEPS = [
   { slug: "profile", label: "Profile" },
@@ -38,7 +40,7 @@ function FlowProgress({ current, reached }: { current: number; reached: number }
             <span
               className={cx(
                 "block h-[3px] rounded-full transition-colors duration-300",
-                active ? "bg-red" : done ? "bg-blush-300" : "bg-[rgba(255,255,255,0.1)]",
+                active ? "bg-red" : done ? "bg-blush-300 group-hover:bg-red" : "bg-[rgba(255,255,255,0.1)]",
               )}
             />
           );
@@ -48,7 +50,8 @@ function FlowProgress({ current, reached }: { current: number; reached: number }
                 <Link
                   href={`/onboarding/${s.slug}`}
                   aria-label={`Back to ${s.label}`}
-                  className="block rounded-full py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red"
+                    title={`Back to ${s.label}`}
+                  className="group block rounded-full py-2 focus-visible:ring-2 focus-visible:ring-red focus-visible:outline-none"
                 >
                   {body}
                 </Link>
@@ -72,6 +75,68 @@ function FlowProgress({ current, reached }: { current: number; reached: number }
  * pages that happen to be dark. The orb sits behind the content as ambient
  * light; `level` makes it react while the mic is open.
  */
+/**
+ * Moving between steps that are already done. Without this the rail is the only
+ * way back and the only way forward is finishing the current step, which leaves
+ * someone reviewing an earlier step with no exit at all.
+ */
+function StepNav({ current, reached }: { current: number; reached: number }) {
+  const prev = current > 2 ? FLOW_STEPS[current - 3] : null;
+  const next = current < reached ? FLOW_STEPS[current - 1] : null;
+  const behind = current < reached;
+  return (
+    <div className="flex items-center gap-2">
+      {prev ? (
+        <ButtonLink href={`/onboarding/${prev.slug}`} size="sm" variant="secondary">
+          <Icon name="caret-left" size={15} className="text-current" />
+          <span className="hidden sm:inline">{prev.label}</span>
+          <span className="sm:hidden">Back</span>
+        </ButtonLink>
+      ) : (
+        <span />
+      )}
+      <div className="flex-1" />
+      {behind && (
+        <ButtonLink href={`/onboarding/${FLOW_STEPS[reached - 2].slug}`} size="sm" variant="ghost">
+          Resume setup
+        </ButtonLink>
+      )}
+      {next && (
+        <ButtonLink href={`/onboarding/${next.slug}`} size="sm">
+          <span className="hidden sm:inline">{next.label}</span>
+          <span className="sm:hidden">Next</span>
+          <Icon name="caret-right" size={15} className="text-current" />
+        </ButtonLink>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Setup cannot be skipped to the end: an account only goes active once WhatsApp
+ * verification lands, and drafting needs the persona built in step 3. So the
+ * honest exit is leaving and coming back, which this says plainly rather than
+ * offering a "skip" that would strand the account half-built.
+ */
+function FinishLater() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+        router.replace("/login");
+        router.refresh();
+      }}
+      className="rounded-[10px] px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-red focus-visible:outline-none disabled:opacity-50"
+    >
+      {busy ? "Saving…" : "Finish later"}
+    </button>
+  );
+}
+
 export function FlowShell({
   children,
   current,
@@ -81,6 +146,7 @@ export function FlowShell({
   orb = "ambient",
   footer,
   onBack,
+  reviewOnly,
 }: {
   children: ReactNode;
   current?: number;
@@ -90,7 +156,11 @@ export function FlowShell({
   orb?: "ambient" | "hidden";
   footer?: ReactNode;
   onBack?: () => void;
+  reviewOnly?: boolean;
 }) {
+  // Every step keeps a way out; a review-only step also gets prev/next.
+  const nav = current && reached ? <StepNav current={current} reached={reached} /> : null;
+  const resolvedFooter = footer ?? (reviewOnly ? nav : null);
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--bg)]">
       {orb === "ambient" && <AmbientOrb level={level} />}
@@ -108,19 +178,22 @@ export function FlowShell({
           <Logo height={22} />
         )}
         {current && reached ? <FlowProgress current={current} reached={reached} /> : <div className="flex-1" />}
-        {name && <span className="hidden flex-none text-[12px] text-muted sm:block">{name}</span>}
+        <div className="flex flex-none items-center gap-3">
+          {name && <span className="hidden text-[12px] text-muted sm:block">{name}</span>}
+          <FinishLater />
+        </div>
       </header>
 
       <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-4 sm:px-8">
         <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">{children}</div>
       </main>
 
-      {footer && (
+      {resolvedFooter && (
         <footer
           className="relative z-10 flex-none border-t border-line bg-[color-mix(in_srgb,var(--bg)_86%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-8"
           style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         >
-          <div className="mx-auto w-full max-w-xl">{footer}</div>
+          <div className="mx-auto w-full max-w-xl">{resolvedFooter}</div>
         </footer>
       )}
     </div>

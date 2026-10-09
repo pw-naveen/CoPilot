@@ -26,7 +26,7 @@ export default async function StepPage({ params }: { params: Promise<{ step: str
   // Step 3 runs its own shell: it drives the orb from live mic level and swaps
   // its footer per stage, which the generic frame cannot express.
   const Frame = step === 3 ? Fragment : FlowShell;
-  const frameProps = step === 3 ? {} : { current: step, reached, name: s.user.displayName };
+  const frameProps = step === 3 ? {} : { current: step, reached, name: s.user.displayName, reviewOnly: !editable };
 
   return (
     <Frame {...frameProps}>
@@ -35,6 +35,8 @@ export default async function StepPage({ params }: { params: Promise<{ step: str
         <VoiceStep
           userId={actor.id}
           editable={editable}
+          reached={reached}
+          displayName={s.user.displayName}
           questions={QUESTIONS.map((q) => ({ key: q.key, q: q.q }))}
           answers={s.answers.map((a) => ({ key: a.questionKey, text: a.text ?? "", transcript: a.transcript, audio: a.audioSignedUrl }))}
           prefs={Object.fromEntries(PREF_KEYS.map((k) => [k, s.answers.find((a) => a.questionKey === k)?.text ?? ""]))}
