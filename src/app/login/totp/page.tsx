@@ -28,7 +28,7 @@ export default function TotpPage() {
   return (
     <main className="wash-bottom flex min-h-screen flex-col">
       <div className="flex justify-end px-6 py-6 sm:px-14">
-        <Logo height={32} />
+        <Logo height={40} />
       </div>
       <form onSubmit={submit} className="mx-6 flex max-w-md flex-col gap-6 sm:mx-14">
         <Eyebrow>Two-factor check</Eyebrow>
