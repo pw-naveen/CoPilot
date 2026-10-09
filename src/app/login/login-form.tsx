@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
-import { Button, Field, Icon, Input, Notice, Orb } from "@/components/ui";
+import { Button, Field, Icon, Input, Notice } from "@/components/ui";
+import { Orb } from "@/components/orb";
 
 export function LoginForm({ linkError }: { linkError?: boolean }) {
   const router = useRouter();
@@ -33,7 +34,9 @@ export function LoginForm({ linkError }: { linkError?: boolean }) {
   return (
     <div className="mx-auto w-full max-w-sm">
       <div className="rise flex flex-col items-center gap-5 text-center">
-        <Orb size={88} icon="sparkle" />
+        <span className="relative grid h-[112px] w-[112px] flex-none place-items-center">
+          <Orb className="absolute inset-0" />
+        </span>
         <div>
           <h1 className="text-[28px] leading-tight font-bold text-ink">Welcome back</h1>
           <p className="mt-1.5 text-[15px] text-muted">Sign in to your CoPilot account.</p>

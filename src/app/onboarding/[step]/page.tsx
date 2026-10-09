@@ -1,8 +1,9 @@
+import { Fragment } from "react";
 import { notFound, redirect } from "next/navigation";
 import { userActor } from "@/server/page-auth";
 import { onboardingState, STEPS } from "@/server/services/onboarding";
 import { PREF_KEYS, QUESTIONS, SAMPLE_KINDS } from "@/server/persona-schema";
-import { Stepper } from "../stepper";
+import { FlowShell } from "../flow-shell";
 import { ProfileStep } from "./profile-step";
 import { VoiceStep } from "./voice-step";
 import { PersonaStep } from "./persona-step";
@@ -22,10 +23,13 @@ export default async function StepPage({ params }: { params: Promise<{ step: str
   if (step > reached) redirect(`/onboarding/${STEPS[reached]}`);
   const editable = step === reached;
 
+  // Step 3 runs its own shell: it drives the orb from live mic level and swaps
+  // its footer per stage, which the generic frame cannot express.
+  const Frame = step === 3 ? Fragment : FlowShell;
+  const frameProps = step === 3 ? {} : { current: step, reached, name: s.user.displayName };
+
   return (
-    <>
-      {/* Step 3 takes over the viewport, so the stepper would only sit behind it. */}
-      {step !== 3 && <Stepper current={step} reached={reached} />}
+    <Frame {...frameProps}>
       {step === 2 && <ProfileStep user={s.user} editable={editable} />}
       {step === 3 && (
         <VoiceStep
@@ -50,6 +54,6 @@ export default async function StepPage({ params }: { params: Promise<{ step: str
       )}
       {step === 6 && <CadenceStep userId={actor.id} editable={editable} timezone={s.user.timezone} cadence={s.cadence ? { postsPerWeek: s.cadence.postsPerWeek, weekdays: s.cadence.weekdays, times: s.cadence.times } : null} />}
       {step === 7 && <WhatsAppStep userId={actor.id} phone={s.user.phoneE164} verified={!!s.user.whatsappVerifiedAt} />}
-    </>
+    </Frame>
   );
 }
