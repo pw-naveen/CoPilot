@@ -240,8 +240,24 @@ export function Textarea(props: ComponentProps<"textarea">) {
   return <textarea {...props} className={cx(inputCls, "min-h-28 py-2.5 leading-relaxed", props.className)} />;
 }
 
-export function Select(props: ComponentProps<"select">) {
-  return <select {...props} className={cx(inputCls, "h-10 appearance-none pr-9", props.className)} />;
+/**
+ * `appearance-none` removes the browser's own arrow, so the control has to draw
+ * one: without it a select is indistinguishable from a text input.
+ */
+export function Select({ className, ...props }: ComponentProps<"select">) {
+  // `className` sizes the wrapper, not the select: the caret is positioned
+  // against the wrapper, so a width on the inner element would strand it.
+  return (
+    <span className={cx("relative block", className)}>
+      <select {...props} className={cx(inputCls, "h-10 w-full appearance-none pr-9")} />
+      <Icon
+        name="caret-down"
+        size={16}
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted"
+      />
+    </span>
+  );
 }
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -257,7 +273,7 @@ export const STATUS_LABEL: Record<string, string> = {
   invited: "Invited",
   onboarding: "Onboarding",
   active: "Active",
-  paused: "Paused",
+  paused: "Suspended",
 };
 
 /** Blush tints deepen as a post moves toward approval; red is reserved for the end states. */

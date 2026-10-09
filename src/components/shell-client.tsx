@@ -6,7 +6,11 @@ import type { ReactNode } from "react";
 import { Icon, cx } from "./ui";
 import type { IconName } from "./icon-paths";
 
-export type NavItem = { href: string; label: string; icon: IconName };
+/**
+ * `secondary` keeps an item out of the mobile tab bar. Seven tabs at 390px is
+ * 55px each and wraps the labels; the rail has the room, a thumb does not.
+ */
+export type NavItem = { href: string; label: string; icon: IconName; secondary?: boolean };
 
 const isActive = (path: string, href: string, exact?: boolean) =>
   exact ? path === href : path === href || path.startsWith(href + "/");
@@ -55,6 +59,34 @@ export function Rail({ items }: { items: NavItem[] }) {
             {active && <span aria-hidden className="absolute top-1.5 bottom-1.5 -left-2 w-[2px] rounded-full bg-red" />}
             <Icon name={n.icon} size={19} className={cx("transition-colors", active ? "text-red-text" : "text-current")} />
             <span className="w-full text-center leading-[1.15] hyphens-auto">{n.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** The pages that don't fit the tab bar, as icons in the mobile header. */
+export function SecondaryNav({ items }: { items: NavItem[] }) {
+  const path = usePathname();
+  if (!items.length) return null;
+  return (
+    <nav aria-label="More" className="flex items-center gap-0.5 md:hidden">
+      {items.map((n) => {
+        const active = isActive(path, n.href, exactFor(n.href));
+        return (
+          <Link
+            key={n.href}
+            href={n.href}
+            aria-label={n.label}
+            title={n.label}
+            aria-current={active ? "page" : undefined}
+            className={cx(
+              "grid h-9 w-9 place-items-center rounded-full transition-colors",
+              active ? "bg-blush-100 text-red-text" : "text-muted hover:text-ink",
+            )}
+          >
+            <Icon name={n.icon} size={18} className="text-current" />
           </Link>
         );
       })}

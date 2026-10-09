@@ -194,6 +194,11 @@ export function answerQuestion(userId: string, question: string, scheduleText: s
 
 export type DraftImage = { id: string; description: string; consent: boolean };
 
+/** Headed so the model can tell the employer's brief from the rest of the prompt. */
+function orgBlock(context?: string) {
+  return context?.trim() ? `Organisation brief (applies to everyone at this employer):\n${context.trim()}` : "";
+}
+
 const draftSchema = z.object({
   text: z.string(),
   image_ids: z.array(z.string()),
@@ -202,9 +207,15 @@ const draftSchema = z.object({
 });
 export type Draft = z.infer<typeof draftSchema>;
 
+/**
+ * `orgContext` is the employer's standing brief. It is a separate block rather
+ * than merged into the persona: the persona is regenerated from the user's own
+ * answers and would lose it, and the audit trail should show which came from
+ * whom.
+ */
 export function generateDraft(
   userId: string,
-  a: { persona: Persona; input: string; recent: string[]; slotDate: string; images: DraftImage[]; issues?: string[] },
+  a: { persona: Persona; input: string; recent: string[]; slotDate: string; images: DraftImage[]; issues?: string[]; orgContext?: string },
 ) {
   return structured({
     kind: "draft_generation",
@@ -212,6 +223,7 @@ export function generateDraft(
     vars: {
       persona: json(a.persona),
       recent: a.recent.length ? a.recent.map((r, i) => `${i + 1}. ${r.slice(0, 280)}`).join("\n") : "(none yet)",
+      org_context: orgBlock(a.orgContext),
       slot_date: a.slotDate,
       issues: a.issues?.length ? `A previous attempt failed review. Fix these issues:\n- ${a.issues.join("\n- ")}` : "",
     },
@@ -225,11 +237,11 @@ export function generateDraft(
 
 const reviewSchema = z.object({ pass: z.boolean(), issues: z.array(z.string()) });
 
-export function reviewDraft(userId: string, a: { persona: Persona; input: string; text: string; images: DraftImage[] }) {
+export function reviewDraft(userId: string, a: { persona: Persona; input: string; text: string; images: DraftImage[]; orgContext?: string }) {
   return structured({
     kind: "review_pass",
     prompt: "draft-review",
-    vars: { persona: json(a.persona), input: a.input, images: a.images.map((i) => `${i.id}: consent=${i.consent}; ${i.description}`).join("; ") || "none" },
+    vars: { persona: json(a.persona), org_context: orgBlock(a.orgContext), input: a.input, images: a.images.map((i) => `${i.id}: consent=${i.consent}; ${i.description}`).join("; ") || "none" },
     user: a.text,
     schema: reviewSchema,
     model: models().classify,
@@ -240,11 +252,11 @@ export function reviewDraft(userId: string, a: { persona: Persona; input: string
 
 const revisionSchema = z.object({ text: z.string(), summary: z.string(), first_comment: z.string() });
 
-export function reviseDraft(userId: string, a: { persona: Persona; text: string; feedback: string }) {
+export function reviseDraft(userId: string, a: { persona: Persona; text: string; feedback: string; orgContext?: string }) {
   return structured({
     kind: "revision",
     prompt: "draft-revision",
-    vars: { persona: json(a.persona), feedback: a.feedback },
+    vars: { persona: json(a.persona), org_context: orgBlock(a.orgContext), feedback: a.feedback },
     user: a.text,
     schema: revisionSchema,
     model: models().draft,

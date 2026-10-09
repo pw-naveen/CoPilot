@@ -3,16 +3,18 @@ import type { ReactNode } from "react";
 import type { Actor } from "@/server/actor";
 import { Icon, Logo } from "./ui";
 import type { IconName } from "./icon-paths";
-import { LogoutButton, Rail, TabBar, type NavItem } from "./shell-client";
+import { LogoutButton, Rail, SecondaryNav, TabBar, type NavItem } from "./shell-client";
 
 export type { NavItem };
 
 export const STAFF_NAV: NavItem[] = [
-  { href: "/admin", label: "Board", icon: "list-checks" },
+  { href: "/admin", label: "Overview", icon: "chart-bar" },
+  { href: "/admin/board", label: "Board", icon: "list-checks" },
   { href: "/admin/users", label: "Accounts", icon: "users-three" },
-  { href: "/admin/staff", label: "Sub-admins", icon: "users-four" },
-  { href: "/admin/audit", label: "Audit", icon: "eye" },
-  { href: "/admin/settings", label: "Settings", icon: "gear" },
+  { href: "/admin/organizations", label: "Orgs", icon: "buildings" },
+  { href: "/admin/staff", label: "Sub-admins", icon: "users-four", secondary: true },
+  { href: "/admin/audit", label: "Audit", icon: "eye", secondary: true },
+  { href: "/admin/settings", label: "Settings", icon: "gear", secondary: true },
 ];
 
 export const USER_NAV: NavItem[] = [
@@ -34,7 +36,7 @@ const initials = (name: string) =>
  * driven by the same nav list, so a route only has to be declared once.
  */
 export function AppShell({ actor, nav, children, devTools }: { actor: Actor; nav: NavItem[]; children: ReactNode; devTools?: boolean }) {
-  const items = devTools ? [...nav, { href: "/dev", label: "Dev", icon: "code" as IconName }] : nav;
+  const items = devTools ? [...nav, { href: "/dev", label: "Dev", icon: "code" as IconName, secondary: true }] : nav;
   const home = actor.type === "staff" ? "/admin" : "/";
   const role = actor.type === "staff" ? (actor.role === "admin" ? "Admin" : "Sub-admin") : actor.email;
 
@@ -56,6 +58,7 @@ export function AppShell({ actor, nav, children, devTools }: { actor: Actor; nav
             </Link>
             <div className="min-w-0 flex-1" />
             <div className="flex flex-none items-center gap-3">
+              <SecondaryNav items={items.filter((n) => n.secondary)} />
               <span className="hidden text-right text-[12px] leading-tight sm:block">
                 <span className="block font-semibold text-ink">{actor.name}</span>
                 <span className="block text-muted">{role}</span>
@@ -75,7 +78,7 @@ export function AppShell({ actor, nav, children, devTools }: { actor: Actor; nav
         <main className="mx-auto max-w-[1320px] px-4 pt-7 pb-28 sm:px-7 sm:pt-9 md:pb-16">{children}</main>
       </div>
 
-      <TabBar items={items} />
+      <TabBar items={items.filter((n) => !n.secondary)} />
     </div>
   );
 }

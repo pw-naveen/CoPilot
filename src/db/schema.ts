@@ -60,6 +60,20 @@ export const staff = pgTable("staff", {
   ...timestamps,
 });
 
+/**
+ * A company whose people use CoPilot. `context` is the standing brief that
+ * applies to everyone in it — house writing rules, compliance lines, things
+ * never to claim — and it rides along with every draft, review and rewrite.
+ */
+export const organizations = pgTable("organizations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull().unique(),
+  context: text("context").notNull().default(""),
+  // Retired rather than deleted: the people who signed up under it stay linked.
+  active: boolean("active").notNull().default(true),
+  ...timestamps,
+});
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
@@ -67,6 +81,9 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   displayName: text("display_name").notNull(),
   title: text("title"),
+  // The chosen organization, and its name copied in for display. The copy keeps
+  // profile editing and the persona working for accounts with no organization.
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "set null" }),
   org: text("org"),
   specialty: text("specialty"),
   linkedinUrl: text("linkedin_url"),

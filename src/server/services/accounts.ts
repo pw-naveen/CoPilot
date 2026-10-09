@@ -5,7 +5,7 @@ import { actorRef, type AnyActor, type StaffActor } from "../actor";
 import { audit } from "../audit";
 import { sendInvite } from "../auth";
 import { getSetting } from "../config";
-import { conflict, notFound } from "../errors";
+import { badRequest, conflict, notFound } from "../errors";
 import { assertUserAccess, requireAdmin, requireInvitePermission, requireStaff, scopeWhere } from "../scope";
 
 export const e164 = z
@@ -156,6 +156,64 @@ export async function updateAccountSettings(
     after: patch,
   });
   return after;
+}
+
+/**
+ * Suspending stops the schedule: no drafts, no reminders, no slot generation.
+ * Everything already written stays, and resuming picks the schedule back up —
+ * `paused` is the same state the account settings toggle has always set, so
+ * there is one "switched off" state rather than two that behave alike.
+ */
+export async function suspendUser(actor: AnyActor, userId: string, suspend: boolean) {
+  requireStaff(actor);
+  const before = await getUser(actor, userId);
+  if (suspend && before.status !== "active" && before.status !== "paused")
+    throw conflict("Only a live account can be suspended");
+  if (!suspend && before.status !== "paused") throw conflict("That account is not suspended");
+  const [after] = await db
+    .update(schema.users)
+    .set({ status: suspend ? "paused" : "active" })
+    .where(eq(schema.users.id, userId))
+    .returning();
+  await audit(actor, {
+    action: suspend ? "user.suspend" : "user.resume",
+    entity: "user",
+    entityId: userId,
+    userId,
+    before: { status: before.status },
+    after: { status: after.status },
+  });
+  return after;
+}
+
+/**
+ * Permanently removes an account and everything that belongs to it: persona,
+ * posts, slots, WhatsApp history, recordings. Every one of those tables
+ * cascades from `users`, so the delete is a single statement.
+ *
+ * The audit log does not: it has no foreign key to `users` on purpose, so the
+ * record of what was done to the account survives the account. Admin only —
+ * a sub-admin can suspend, not erase.
+ *
+ * `confirmEmail` has to match. The caller already clicked through a dialog, but
+ * the destructive half of this pair is one word away from the reversible half
+ * in every list it appears in, so the server asks for the name of what is being
+ * deleted rather than trusting the button.
+ */
+export async function deleteUser(actor: AnyActor, userId: string, confirmEmail: string) {
+  requireAdmin(actor);
+  const u = await db.query.users.findFirst({ where: eq(schema.users.id, userId) });
+  if (!u) throw notFound();
+  if (confirmEmail.trim().toLowerCase() !== u.email.toLowerCase())
+    throw badRequest("Type the account's email address to confirm");
+  await audit(actor, {
+    action: "user.delete",
+    entity: "user",
+    entityId: userId,
+    userId,
+    before: { email: u.email, name: u.displayName, status: u.status, phone: u.phoneE164 },
+  });
+  await db.delete(schema.users).where(eq(schema.users.id, userId));
 }
 
 export async function resendInvite(actor: StaffActor, userId: string) {

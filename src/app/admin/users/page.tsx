@@ -5,7 +5,8 @@ import { Card, EmptyState, Icon, PageHeader, StatusPill } from "@/components/ui"
 import { InviteUserForm } from "./invite-form";
 import { PendingRegistrations } from "./pending-registrations";
 
-const STEP = ["", "Invite", "Profile", "Voice", "Persona", "Tone check", "Cadence", "WhatsApp"];
+// Index by `onboardingStep`; 7 means setup is finished.
+const STEP = ["", "Invite", "Profile", "Voice", "Persona", "Tone check", "Cadence", "Done"];
 
 export default async function UsersPage() {
   const actor = await staffActor();
