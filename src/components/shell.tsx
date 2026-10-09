@@ -52,9 +52,8 @@ export function AppShell({ actor, nav, children, devTools }: { actor: Actor; nav
         <header className="sticky top-0 z-20 border-b border-line bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] backdrop-blur-xl">
           <div className="mx-auto flex h-14 max-w-[1320px] items-center gap-3 px-4 sm:px-7">
             <Link href={home} className="flex-none md:hidden" aria-label="Home">
-              <Logo height={22} />
+              <Logo variant="mark" height={26} />
             </Link>
-            <span className="hidden text-[13px] font-semibold tracking-[-0.01em] text-ink md:block">CoPilot</span>
             <div className="min-w-0 flex-1" />
             <div className="flex flex-none items-center gap-3">
               <span className="hidden text-right text-[12px] leading-tight sm:block">

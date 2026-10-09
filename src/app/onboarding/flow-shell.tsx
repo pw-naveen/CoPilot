@@ -175,7 +175,7 @@ export function FlowShell({
             <Icon name="caret-left" size={20} className="text-current" />
           </button>
         ) : (
-          <Logo height={22} />
+          <Logo height={34} />
         )}
         {current && reached ? <FlowProgress current={current} reached={reached} /> : <div className="flex-1" />}
         <div className="flex flex-none items-center gap-3">

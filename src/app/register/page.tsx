@@ -11,7 +11,7 @@ export default async function RegisterPage() {
     <main className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[var(--bg)]">
       <AmbientOrb />
       <div className="relative z-10 flex justify-center px-6 py-7 sm:justify-start sm:px-10">
-        <Logo height={26} />
+        <Logo height={40} />
       </div>
       <div className="relative z-10 flex flex-1 items-center justify-center px-6 py-10">
         <RegisterForm />

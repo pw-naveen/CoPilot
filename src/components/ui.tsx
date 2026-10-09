@@ -25,19 +25,25 @@ export function Icon({ name, size = 20, className, label }: { name: IconName; si
 
 /** Supplied lockup, used as-is (never redrawn or recoloured). */
 /**
- * The product runs on a dark ground, so `reverse` (white wordmark, gradient
- * pulse) is the default per the brand guidance for ink grounds. `color` stays
- * for the light surfaces — printed previews and emailed drafts.
+ * The product mark. CoPilot's lockup is a white wordmark with the red monogram,
+ * drawn for dark grounds — which is every surface the app has. There is no
+ * dark-text variant, so a light surface would need one commissioned rather than
+ * recoloured. `pulseworks` stays for the places the parent brand is the point.
  */
-export function Logo({ variant = "reverse", height = 28 }: { variant?: "color" | "reverse" | "white" | "mark" | "mark-color"; height?: number }) {
-  const src =
-    variant === "mark"
-      ? "/brand/pulseworks-mark-white.png"
-      : variant === "mark-color"
-        ? "/brand/pulseworks-mark-color.png"
-        : `/brand/pulseworks-lockup-${variant}.png`;
+const LOGOS = {
+  lockup: { src: "/brand/copilot-lockup-white.png", alt: "CoPilot", ratio: 793 / 248 },
+  mark: { src: "/brand/copilot-mark.png", alt: "CoPilot", ratio: 146 / 176 },
+  pulseworks: { src: "/brand/pulseworks-lockup-reverse.png", alt: "Pulseworks", ratio: 0 },
+  "pulseworks-mark": { src: "/brand/pulseworks-mark-white.png", alt: "Pulseworks", ratio: 0 },
+} as const;
+
+export function Logo({ variant = "lockup", height = 28 }: { variant?: keyof typeof LOGOS; height?: number }) {
+  const l = LOGOS[variant];
+  // Width from the intrinsic ratio so the row reserves the right space before
+  // the image loads, instead of reflowing once it does.
+  const width = l.ratio ? Math.round(height * l.ratio) : undefined;
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="Pulseworks" style={{ height, width: "auto" }} />;
+  return <img src={l.src} alt={l.alt} width={width} height={height} style={{ height, width: width ?? "auto" }} />;
 }
 
 export function Eyebrow({ children }: { children: ReactNode }) {

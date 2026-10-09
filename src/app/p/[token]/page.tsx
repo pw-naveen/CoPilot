@@ -14,7 +14,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ token:
     <div className="wash min-h-screen">
       <header className="mx-auto flex h-20 max-w-6xl items-center justify-between px-4 sm:px-8">
         <Eyebrow>Your draft</Eyebrow>
-        <Logo height={26} />
+        <Logo height={40} />
       </header>
       <main className="mx-auto max-w-6xl px-4 pb-20 sm:px-8">
         {!resolved ? (
