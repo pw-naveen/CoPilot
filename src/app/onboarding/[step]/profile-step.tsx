@@ -29,7 +29,7 @@ export function ProfileStep({ user, editable }: { user: U; editable: boolean }) 
 
   return (
     <>
-      <PageHeader eyebrow="Step 1 · Profile" lead="First, the basics" accent="you sign with." intro="This is how you'll appear on drafts and in the persona. It takes a minute." />
+      <PageHeader lead="First, the basics" accent="you sign with." intro="This is how you'll appear on drafts and in the persona. It takes a minute." />
       {!editable && <div className="mb-6"><ReviewOnly /></div>}
       <Card>
         <fieldset disabled={!editable} className="grid gap-5 sm:grid-cols-2">

@@ -27,7 +27,7 @@ export function WhatsAppStep({ userId, phone, verified }: { userId: string; phon
   if (live)
     return (
       <>
-        <PageHeader eyebrow="Step 6 · WhatsApp" lead="You're live." accent="Over to WhatsApp." />
+        <PageHeader lead="You're live." accent="Over to WhatsApp." />
         <Card className="flex flex-col items-start gap-4">
           <IconCircle name="check-circle" solid />
           <p className="lead">Your number is verified and the welcome message is on its way. From now on, send topics, photos and voice notes on WhatsApp and approve drafts there.</p>
@@ -39,7 +39,6 @@ export function WhatsAppStep({ userId, phone, verified }: { userId: string; phon
   return (
     <>
       <PageHeader
-        eyebrow="Step 6 · WhatsApp"
         lead="Last step:"
         accent="connect WhatsApp."
         intro="Day to day, everything happens on WhatsApp. Confirm your number, then reply to the message we send."
