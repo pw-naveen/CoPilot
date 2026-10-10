@@ -31,7 +31,7 @@ export async function enqueueWebhook(source: "evolution" | "mock", payload: unkn
 }
 
 export async function processWebhook(source: "evolution" | "mock", payload: unknown) {
-  const g = source === "mock" ? (await import("./index")).mockGateway() : gateway();
+  const g = source === "mock" ? (await import("./index")).mockGateway() : await gateway();
   if (source === "mock") g.onMessage(handleGatewayEvent);
   return g.receive(payload);
 }
@@ -121,7 +121,7 @@ async function openBundle(userId: string, at: Date) {
 
 async function downloadVia(msg: InboundMessage) {
   if (msg.media) return msg.media;
-  return gateway().downloadMedia(msg);
+  return (await gateway()).downloadMedia(msg);
 }
 
 async function processNow(bundleId: string) {

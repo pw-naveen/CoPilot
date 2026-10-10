@@ -78,7 +78,7 @@ export async function deliver(id: string): Promise<boolean> {
   }
   try {
     await spacing();
-    const g = gateway();
+    const g = await gateway();
     await g.sendTyping?.(m.phoneE164, Math.min(3000, 600 + (m.body?.length ?? 0) * 8));
     const media = m.rawJson as { mediaUrl?: string; mime?: string } | null;
     const res = media?.mediaUrl
