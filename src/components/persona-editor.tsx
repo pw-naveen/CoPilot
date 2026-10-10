@@ -33,7 +33,9 @@ export function PersonaEditor({ userId, persona, version, editable = true }: { u
   const [err, setErr] = useState<string | null>(null);
   const [draft, setDraft] = useState(() => toForm(persona));
 
-  useEffect(() => setDraft(toForm(persona)), [persona]);
+  useEffect(() => {
+    setDraft(toForm(persona));
+  }, [persona]);
 
   async function regenerate() {
     setBusy("regen");

@@ -25,7 +25,13 @@ export type ThreadMsg = {
  */
 export function Thread({ messages, perspective = "phone" }: { messages: ThreadMsg[]; perspective?: "assistant" | "phone" }) {
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [messages.length]);
+  // Braces, not a concise body: React treats anything an effect returns as a
+  // cleanup function, and `scrollIntoView` returns undefined only in a stock
+  // browser — a smooth-scroll polyfill or an extension can hand back a promise,
+  // and React then warns and tries to call it on unmount.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: "end" });
+  }, [messages.length]);
   if (!messages.length) return <p className="py-16 text-center text-[14px] text-muted">No messages yet.</p>;
   return (
     <div className="flex flex-col gap-2">
