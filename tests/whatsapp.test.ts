@@ -11,8 +11,9 @@ import { saveCadence } from "@/server/services/cadence";
 import { SYSTEM } from "@/server/actor";
 import { MockGateway } from "@/server/whatsapp/mock";
 import { EvolutionGateway } from "@/server/whatsapp/evolution";
-import { cachedStatus, setGateway } from "@/server/whatsapp";
+import { cachedStatus, diagnose, gatewayChoice, sendTestMessage, setGateway } from "@/server/whatsapp";
 import { processDueBundles } from "@/server/whatsapp/inbound";
+import { schedulerTick } from "@/server/scheduler";
 import { sweepOutbox } from "@/server/whatsapp/outbox";
 import { redis } from "@/server/queue";
 import { call, cookieFor, inbound, resetDb, seedPeople } from "./helpers";
@@ -373,5 +374,116 @@ describe("EvolutionGateway (swap with no other code changes)", () => {
     const h = hits.find((x) => x.url === "/webhook/set/mediwira")!;
     expect(h.body.webhook.events).toEqual(["MESSAGES_UPSERT", "CONNECTION_UPDATE", "QRCODE_UPDATED"]);
     expect(h.body.webhook.url).toContain("secret=s3cret");
+  });
+
+  // Saving the credentials in Settings is what an admin actually does; if that
+  // does not switch the gateway, they fill in the form and nothing happens.
+  describe("choosing the gateway", () => {
+    beforeEach(() => {
+      delete process.env.WHATSAPP_GATEWAY;
+      setGateway(null);
+    });
+    afterAll(() => {
+      process.env.WHATSAPP_GATEWAY = "mock";
+      setGateway(null);
+    });
+
+    it("uses Evolution because the settings are saved, with no env var set", async () => {
+      const c = await gatewayChoice();
+      expect(c.name).toBe("evolution");
+      expect(c.reason).toMatch(/configured in Settings/i);
+    });
+
+    it("still lets the environment force the mock, and says so", async () => {
+      process.env.WHATSAPP_GATEWAY = "mock";
+      setGateway(null);
+      const c = await gatewayChoice();
+      expect(c.name).toBe("mock");
+      expect(c.reason).toMatch(/WHATSAPP_GATEWAY=mock/);
+    });
+
+    it("falls back to the mock and names what is missing", async () => {
+      await setSetting("evolution.api_key", "");
+      const c = await gatewayChoice();
+      expect(c.name).toBe("mock");
+      expect(c.reason).toMatch(/API key/);
+    });
+
+    it("checks the real instance and reports the URL without leaking the key", async () => {
+      const d = await diagnose();
+      expect(d.gateway).toBe("evolution");
+      expect(d.ok).toBe(true);
+      expect(d.state).toBe("open");
+      expect(d.target.url).toBe(`http://127.0.0.1:${port}`);
+      expect(d.target.instance).toBe("mediwira");
+      expect(d.target.apiKey).toBe(true);
+      expect(hits.some((h) => h.url === "/instance/connectionState/mediwira")).toBe(true);
+      expect(JSON.stringify(d)).not.toContain("evo-key");
+    });
+
+    it("reports the instance being down instead of throwing", async () => {
+      state = "close";
+      const d = await diagnose();
+      expect(d.ok).toBe(false);
+      expect(d.state).toBe("close");
+    });
+
+    it("surfaces a bad API key as the error it is", async () => {
+      await setSetting("evolution.api_key", "wrong-key");
+      setGateway(null);
+      const d = await diagnose();
+      expect(d.ok).toBe(false);
+      expect(d.detail).toMatch(/401/);
+    });
+
+    it("sends a test message straight through the gateway", async () => {
+      const r = await sendTestMessage("+60110000001", "ping");
+      expect(r.gateway).toBe("evolution");
+      expect(r.id).toMatch(/^EVO/);
+      const send = hits.find((h) => h.url === "/message/sendText/mediwira" && h.body.text === "ping");
+      expect(send?.body.number).toBe("60110000001");
+    });
+
+    /**
+     * The whole live loop over real HTTP: the scheduler asks what to post about,
+     * the answer arrives as an Evolution webhook, and the draft comes back with
+     * a preview link — every outbound hop through /message/sendText.
+     */
+    it("asks for a topic, drafts the reply and sends back a preview link", async () => {
+      await travelTo("2026-10-05T10:00");
+      const { user } = await readyForWhatsApp();
+      await verify(user.id);
+      await db.delete(schema.slots).where(eq(schema.slots.userId, user.id));
+      // Six days out: the topic prompt is due, the auto-draft is not.
+      const publishAt = DateTime.fromISO("2026-10-11T09:00", { zone: KL }).toJSDate();
+      const [slot] = await db
+        .insert(schema.slots)
+        .values({ userId: user.id, publishAt, approvalDeadline: new Date(publishAt.getTime() - 48 * 3600_000), status: "awaiting_input" })
+        .returning();
+
+      await schedulerTick();
+      const prompt = hits.find((h) => h.url === "/message/sendText/mediwira" && /what would you like to share/i.test(h.body.text ?? ""));
+      expect(prompt, "the topic prompt should go out over Evolution").toBeTruthy();
+      expect(prompt!.body.number).toBe("60110000001");
+      expect((await db.query.slots.findFirst({ where: eq(schema.slots.id, slot.id) }))!.topicPromptSentAt).toBeTruthy();
+
+      // Reply on the handset, then close the bundle.
+      const jid = "60110000001@s.whatsapp.net";
+      await webhook({ event: "messages.upsert", data: { key: { remoteJid: jid, fromMe: false, id: "T1" }, message: { conversation: "The clinics we opened in towns with no cardiologist" } } });
+      await webhook({ event: "messages.upsert", data: { key: { remoteJid: jid, fromMe: false, id: "T2" }, message: { conversation: "done" } } });
+      await processDueBundles();
+
+      const post = await db.query.posts.findFirst({ where: eq(schema.posts.userId, user.id) });
+      expect(post?.status).toBe("pending_approval");
+      expect(post?.suggestedTopic).toBe(false); // their topic, not one we picked
+
+      const preview = hits.filter((h) => h.url === "/message/sendText/mediwira").map((h) => String(h.body.text)).find((t) => t.includes("/p/"));
+      expect(preview, "the preview link should go out over Evolution").toBeTruthy();
+
+      // The link resolves without a session and offers the two actions.
+      const token = preview!.match(/\/p\/([\w-]+)/)![1];
+      const { resolvePreview } = await import("@/server/services/posts");
+      expect((await resolvePreview(token))?.id).toBe(post!.id);
+    });
   });
 });

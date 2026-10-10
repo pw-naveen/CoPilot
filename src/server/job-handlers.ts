@@ -28,7 +28,7 @@ export const handlers: Record<JobKind, Handler> = {
   },
   async wa_register_webhook() {
     const { gateway, webhookUrl, checkConnection } = await import("./whatsapp");
-    const g = gateway();
+    const g = await gateway();
     if (!g.registerWebhook) return { ok: true, note: "This gateway doesn't use webhooks" };
     await g.registerWebhook(await webhookUrl());
     return { ok: true, status: await checkConnection() };
